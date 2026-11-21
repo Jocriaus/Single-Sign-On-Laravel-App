@@ -10,6 +10,9 @@
 <main class="card" aria-labelledby="title">
     <p class="org">Bulacan State University</p>
     <h1 id="title">{{ $displayName }}</h1>
+    @if (session('status'))
+        <p class="alert info" role="status">{{ session('status') }}</p>
+    @endif
     <p class="lead">You're signed in as <strong>{{ $username }}</strong>.
         University apps will sign you in without asking for your password.</p>
     @if ($isAdmin)

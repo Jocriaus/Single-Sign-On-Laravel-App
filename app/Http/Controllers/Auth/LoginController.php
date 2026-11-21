@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Sso\Accounts\Lockout;
 use App\Sso\Activity;
+use App\Sso\LocalRedirect;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +16,8 @@ use Laravel\Passport\Client;
 
 class LoginController extends Controller
 {
+    private const DUMMY_HASH = '$2y$12$zFzP676WtdWS3jIU913BgecX4q9ZoRQp3JavacjXkpSpDvgZf8G5e';
+
     private const GENERIC = 'Wrong username or password.';
 
     public function show(Request $request)
@@ -39,7 +42,10 @@ class LoginController extends Controller
 
         $user = User::findByUsername($data['username']);
 
-        if (! $user || ! Hash::check($data['password'], $user->password)) {
+        // Hash against a dummy when the user is unknown so timing doesn't reveal which usernames exist.
+        $passwordOk = Hash::check($data['password'], $user ? $user->password : self::DUMMY_HASH);
+
+        if (! $user || ! $passwordOk) {
             if ($user && ! Lockout::isLocked($user)) {
                 Lockout::recordFailure($user);
             }
@@ -67,13 +73,7 @@ class LoginController extends Controller
         ]);
         Activity::log($user, 'Signed in', Activity::AUTH);
 
-        $intended = $request->session()->get('url.intended');
-        if ($intended && parse_url($intended, PHP_URL_HOST) !== null
-            && parse_url($intended, PHP_URL_HOST) !== $request->getHost()) {
-            $request->session()->forget('url.intended');
-        }
-
-        return redirect()->intended('/');
+        return LocalRedirect::intended();
     }
 
     public function logout(Request $request): RedirectResponse

@@ -14,7 +14,8 @@ class Lockout
 
     public static function recordFailure(User $user): void
     {
-        $user->failed_attempts = (int) $user->failed_attempts + 1;
+        $user->increment('failed_attempts');
+        $user->refresh();
 
         if ($user->failed_attempts >= config('sso.lockout.max_attempts')) {
             $user->account_locked = true;

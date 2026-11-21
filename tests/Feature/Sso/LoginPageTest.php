@@ -135,4 +135,43 @@ class LoginPageTest extends TestCase
         $this->withSession(['url.intended' => 'https://evil.example/'])
             ->login('admin', 'password123')->assertRedirect('/');
     }
+
+    public function test_unknown_username_still_runs_the_password_hash_check(): void
+    {
+        \Illuminate\Support\Facades\Hash::shouldReceive('check')->once()->andReturn(false);
+        $this->login('ghost', 'nope')->assertRedirect('/login');
+    }
+
+    public function test_failed_attempts_are_incremented_atomically(): void
+    {
+        $stale = $this->admin();
+        $this->admin()->increment('failed_attempts');
+        \App\Sso\Accounts\Lockout::recordFailure($stale);
+        $this->assertSame(2, $this->admin()->failed_attempts);
+    }
+
+    public static function intendedProvider(): array
+    {
+        return [
+            'other host' => ['https://evil.example/', '/'],
+            'scheme-relative' => ['//evil.example', '/'],
+            'backslash' => ['/\evil.example', '/'],
+            'other port' => ['http://localhost:8080/x', '/'],
+            'other scheme' => ['https://localhost:8000/x', '/'],
+            'local path' => ['/somewhere', '/somewhere'],
+        ];
+    }
+
+    /** @dataProvider intendedProvider */
+    public function test_intended_url_is_followed_only_when_local(string $intended, string $expected): void
+    {
+        $this->withSession(['url.intended' => $intended])
+            ->login('admin', 'password123')->assertRedirect($expected);
+    }
+
+    public function test_an_absolute_intended_url_on_this_server_is_followed(): void
+    {
+        $this->withSession(['url.intended' => url('/somewhere?a=1')])
+            ->login('admin', 'password123')->assertRedirect(url('/somewhere?a=1'));
+    }
 }
