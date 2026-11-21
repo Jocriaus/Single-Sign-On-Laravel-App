@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Client;
 use App\Sso\OAuth\Scopes;
 use App\Sso\OAuth\SigningKey;
 use Carbon\CarbonInterval;

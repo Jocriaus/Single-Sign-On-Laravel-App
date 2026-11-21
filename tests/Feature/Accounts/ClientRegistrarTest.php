@@ -142,4 +142,37 @@ class ClientRegistrarTest extends TestCase
         $this->assertSame(0, \DB::table('oauth_refresh_tokens')->count());
         $this->assertSame(0, \DB::table('oauth_auth_codes')->count());
     }
+
+    public function test_unsafe_addresses_are_refused_in_every_address_field(): void
+    {
+        $bad = ['https://user:pass@evil.com/cb', 'https://user@evil.com/cb', "https://a/cb x", "https://a/cb
+",
+            'javascript://a.com/%0aalert(1)', "https://a/	cb"];
+        foreach ($bad as $url) {
+            $this->assertInvalid('redirect_uris', $this->data(['redirect_uris' => [$url]]));
+            $this->assertInvalid('post_logout_redirect_uris', $this->data(['post_logout_redirect_uris' => [$url]]));
+            $this->assertInvalid('backchannel_logout_uri', $this->data(['backchannel_logout_uri' => $url]));
+        }
+    }
+
+    public function test_update_ignores_id_secret_and_grant_types(): void
+    {
+        $client = $this->registrar()->register($this->data())['client'];
+        $hash = $client->fresh()->secret;
+
+        $this->registrar()->update($client, $this->data(['id' => 'other', 'secret' => 'hacked', 'grant_types' => ['password']]));
+
+        $fresh = Client::find($client->id);
+        $this->assertNull(Client::find('other'));
+        $this->assertSame($hash, $fresh->secret);
+        $this->assertSame(['authorization_code', 'refresh_token'], $fresh->grant_types);
+    }
+
+    public function test_passport_uses_the_app_client_model(): void
+    {
+        $client = $this->registrar()->register($this->data())['client'];
+
+        $this->assertSame(Client::class, \Laravel\Passport\Passport::clientModel());
+        $this->assertInstanceOf(Client::class, app(\Laravel\Passport\ClientRepository::class)->find($client->id));
+    }
 }

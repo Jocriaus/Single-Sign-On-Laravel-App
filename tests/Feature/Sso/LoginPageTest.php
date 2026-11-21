@@ -4,6 +4,7 @@ namespace Tests\Feature\Sso;
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class LoginPageTest extends TestCase
@@ -165,7 +166,7 @@ class LoginPageTest extends TestCase
         ];
     }
 
-    /** @dataProvider intendedProvider */
+    #[DataProvider('intendedProvider')]
     public function test_intended_url_is_followed_only_when_local(string $intended, string $expected): void
     {
         $this->withSession(['url.intended' => $intended])
