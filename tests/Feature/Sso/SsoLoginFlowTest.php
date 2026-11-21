@@ -8,8 +8,14 @@ use App\Models\User;
 use App\Sso\Accounts\AutomaticRoles;
 use App\Sso\Accounts\UserClaims;
 use App\Sso\OAuth\SigningKey;
+use App\Sso\OAuth\SignInResolver;
+use Defuse\Crypto\Crypto;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
+use Laravel\Passport\Passport;
+use RuntimeException;
 use Tests\Support\OAuthFlow;
 use Tests\TestCase;
 
@@ -311,6 +317,55 @@ class SsoLoginFlowTest extends TestCase
         $this->exchange($app['client'], $app['secret'], $code, $verifier)
             ->assertStatus(400)->assertJson(['error' => 'invalid_grant']);
         $this->assertSame(0, DB::table('oauth_access_tokens')->count());
+    }
+
+    public function test_sign_in_of_another_app_or_user_is_refused(): void
+    {
+        $other = $this->registerApp(['name' => 'Other']);
+        $mutations = [
+            'client' => ['client_id' => $other['client']->id],
+            'user' => ['user_id' => User::factory()->create()->id],
+        ];
+        foreach ($mutations as $label => $change) {
+            [$app, $code, $verifier] = $this->codeForNewApp();
+            SignIn::where('client_id', $app['client']->id)->sole()->forceFill($change)->save();
+
+            $this->exchange($app['client'], $app['secret'], $code, $verifier)
+                ->assertStatus(400)->assertJson(['error' => 'invalid_grant']);
+            $this->assertSame(0, DB::table('oauth_access_tokens')->count(), $label);
+        }
+    }
+
+    public function test_a_fault_while_resolving_the_sign_in_is_refused_and_reported(): void
+    {
+        [$app, $code, $verifier] = $this->codeForNewApp();
+        Exceptions::fake();
+        DB::listen(function ($query) {
+            if (str_contains($query->sql, 'from "oauth_auth_codes"') && str_contains($query->sql, 'sign_in_id')) {
+                throw new RuntimeException('sign-in lookup failed');
+            }
+        });
+
+        $this->exchange($app['client'], $app['secret'], $code, $verifier)
+            ->assertStatus(400)->assertJson(['error' => 'invalid_grant']);
+        Exceptions::assertReported(fn (RuntimeException $e) => $e->getMessage() === 'sign-in lookup failed');
+    }
+
+    public function test_bad_input_to_the_resolver_is_not_reported(): void
+    {
+        Exceptions::fake();
+        $key = Passport::tokenEncryptionKey(app('encrypter'));
+        $codes = [
+            'garbage' => 'not-a-code',
+            'not json' => Crypto::encryptWithPassword('not json', $key),
+            'no id' => Crypto::encryptWithPassword('{"client_id":"x"}', $key),
+        ];
+
+        foreach ($codes as $label => $code) {
+            $request = Request::create('/oauth2/token', 'POST', ['grant_type' => 'authorization_code', 'code' => $code]);
+            $this->assertNull(app(SignInResolver::class)->fromTokenRequest($request), $label);
+        }
+        Exceptions::assertNothingReported();
     }
 
     public function test_refresh_keeps_the_sign_in_and_leaves_out_the_nonce(): void

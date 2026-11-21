@@ -4,7 +4,7 @@ namespace App\Sso\OAuth;
 
 use App\Models\SignIn;
 use Defuse\Crypto\Crypto;
-use Illuminate\Database\Eloquent\Model;
+use Defuse\Crypto\Exception\CryptoException;
 use Illuminate\Http\Request;
 use Laravel\Passport\Passport;
 use Throwable;
@@ -16,35 +16,34 @@ class SignInResolver
     public function fromTokenRequest(Request $request): ?array
     {
         $grant = $request->post('grant_type');
+        [$value, $model, $idKey] = match ($grant) {
+            'authorization_code' => [$request->post('code'), Passport::authCode(), 'auth_code_id'],
+            // The old access token, already revoked by the refresh grant, still names the sign-in.
+            'refresh_token' => [$request->post('refresh_token'), Passport::token(), 'access_token_id'],
+            default => [null, null, null],
+        };
+        if ($model === null || ! is_string($value) || trim($value) === '') {
+            return null;
+        }
 
         try {
-            $signInId = match ($grant) {
-                'authorization_code' => $this->signInIdOf(Passport::authCode(), $this->payload($request->post('code'))['auth_code_id'] ?? null),
-                // The old access token, already revoked by the refresh grant, still names the sign-in.
-                'refresh_token' => $this->signInIdOf(Passport::token(), $this->payload($request->post('refresh_token'))['access_token_id'] ?? null),
-                default => null,
-            };
+            // Decrypted the way the league server encrypted it.
+            $payload = json_decode(Crypto::decryptWithPassword(trim($value), Passport::tokenEncryptionKey(app('encrypter'))), true);
+            $id = is_array($payload) ? ($payload[$idKey] ?? null) : null;
+            if (! is_string($id)) {
+                return null;
+            }
+            $signInId = $model->newQuery()->whereKey($id)->value('sign_in_id');
             $signIn = is_string($signInId) ? SignIn::find($signInId) : null;
-        } catch (Throwable) {
+        } catch (CryptoException) {
+            return null;
+        } catch (Throwable $e) {
+            // Not bad input (league already accepted this value): a fault worth logging.
+            report($e);
+
             return null;
         }
 
         return $signIn ? ['signIn' => $signIn, 'refresh' => $grant === 'refresh_token'] : null;
-    }
-
-    /** Decrypts a code or refresh token the way the league server encrypted it. */
-    private function payload(mixed $value): array
-    {
-        if (! is_string($value) || trim($value) === '') {
-            return [];
-        }
-        $json = Crypto::decryptWithPassword(trim($value), Passport::tokenEncryptionKey(app('encrypter')));
-
-        return (array) json_decode($json, true);
-    }
-
-    private function signInIdOf(Model $model, mixed $id): mixed
-    {
-        return is_string($id) ? $model->newQuery()->whereKey($id)->value('sign_in_id') : null;
     }
 }

@@ -24,11 +24,18 @@ class AccessTokenRepository extends PassportAccessTokenRepository
     {
         $request = request();
         $resolved = $this->resolver->fromTokenRequest($request);
-        $this->context->set($resolved['signIn'] ?? null, $resolved['refresh'] ?? false);
+        $this->context->set(null);
 
         if ($resolved === null && in_array($request->post('grant_type'), ['authorization_code', 'refresh_token'], true)) {
             throw OAuthServerException::invalidGrant('The sign-in behind this grant no longer exists.');
         }
+        if ($resolved !== null && (
+            $resolved['signIn']->client_id !== $accessTokenEntity->getClient()->getIdentifier()
+            || (string) $resolved['signIn']->user_id !== (string) $accessTokenEntity->getUserIdentifier()
+        )) {
+            throw OAuthServerException::invalidGrant('The sign-in behind this grant belongs to another app or user.');
+        }
+        $this->context->set($resolved['signIn'] ?? null, $resolved['refresh'] ?? false);
 
         if ($resolved !== null) {
             // Decrypting the grant above takes ~0.1 s after the grant stamped the expiry; restart the
