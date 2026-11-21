@@ -28,6 +28,10 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::saving(function (User $user) {
+            if ($user->exists && ! $user->isDirty('username')) {
+                return;
+            }
+
             $taken = static::withTrashed()
                 ->whereRaw('LOWER(username) = ?', [mb_strtolower((string) $user->username)])
                 ->when($user->exists, fn ($q) => $q->where('id', '!=', $user->getKey()))
