@@ -3,10 +3,16 @@
 namespace App\Providers;
 
 use App\Models\Client;
+use App\Sso\OAuth\AccessToken;
+use App\Sso\OAuth\AccessTokenRepository;
+use App\Sso\OAuth\AuthCodeRepository;
+use App\Sso\OAuth\IdTokenResponse;
 use App\Sso\OAuth\Scopes;
+use App\Sso\OAuth\SignInContext;
 use App\Sso\OAuth\SigningKey;
 use Carbon\CarbonInterval;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Passport\Bridge;
 use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
@@ -18,6 +24,11 @@ class AppServiceProvider extends ServiceProvider
     {
         Passport::ignoreRoutes();
         $this->app->singleton(SigningKey::class);
+        $this->app->singleton(SignInContext::class);
+
+        // Passport builds its grants and authorization server from these container bindings.
+        $this->app->bind(Bridge\AccessTokenRepository::class, AccessTokenRepository::class);
+        $this->app->bind(Bridge\AuthCodeRepository::class, AuthCodeRepository::class);
     }
 
     /**
@@ -26,6 +37,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Passport::useClientModel(Client::class);
+        Passport::useAccessTokenEntity(AccessToken::class);
+        Passport::useAuthorizationServerResponseType(new IdTokenResponse);
         Passport::tokensCan([
             'openid' => 'Verify your identity',
             'profile' => 'View your name and account type',

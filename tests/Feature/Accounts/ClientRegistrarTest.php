@@ -5,6 +5,7 @@ namespace Tests\Feature\Accounts;
 use App\Models\ActivityLog;
 use App\Models\Client;
 use App\Models\Role;
+use App\Models\SignIn;
 use App\Sso\Apps\ClientRegistrar;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -141,6 +142,22 @@ class ClientRegistrarTest extends TestCase
         $this->assertSame(0, \DB::table('oauth_access_tokens')->count());
         $this->assertSame(0, \DB::table('oauth_refresh_tokens')->count());
         $this->assertSame(0, \DB::table('oauth_auth_codes')->count());
+    }
+
+    public function test_removing_an_app_deletes_its_sign_ins_only(): void
+    {
+        $client = $this->registrar()->register($this->data())['client'];
+        $other = $this->registrar()->register($this->data(['name' => 'Other']))['client'];
+        foreach ([$client, $other] as $app) {
+            SignIn::create([
+                'user_id' => 1, 'client_id' => $app->id, 'sid' => 'sid-1',
+                'auth_time' => now(), 'started_at' => now(),
+            ]);
+        }
+
+        $this->registrar()->remove($client);
+
+        $this->assertSame([$other->id], SignIn::pluck('client_id')->all());
     }
 
     public function test_unsafe_addresses_are_refused_in_every_address_field(): void

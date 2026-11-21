@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias(['password.changed' => RequirePasswordChange::class]);
         $middleware->appendToGroup('web', RequirePasswordChange::class);
+        $middleware->validateCsrfTokens(except: ['oauth2/token']);
         $middleware->trimStrings(except: ['current_password', 'password', 'password_confirmation', 'new_password', 'new_password_confirmation']);
         $middleware->redirectGuestsTo(fn () => route('login'));
     })
