@@ -7,6 +7,7 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Laravel\Passport\Passport;
 use RuntimeException;
+use UnexpectedValueException;
 
 /** The RSA key pair that signs every token this server issues; the same pair Passport uses. */
 class SigningKey
@@ -47,14 +48,20 @@ class SigningKey
         $key = new Key($this->read('public'), 'RS256');
 
         try {
-            return (array) JWT::decode($jwt, $key);
+            $payload = JWT::decode($jwt, $key);
         } catch (ExpiredException $e) {
             if (! $allowExpired) {
                 throw $e;
             }
-
-            return (array) $e->getPayload();
+            $payload = $e->getPayload();
         }
+
+        $claims = json_decode(json_encode($payload), true);
+        if (! is_array($claims) || ! isset($claims['exp'])) {
+            throw new UnexpectedValueException('Token has no exp claim.');
+        }
+
+        return $claims;
     }
 
     private function parts(): array

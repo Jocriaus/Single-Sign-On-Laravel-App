@@ -6,6 +6,7 @@ use App\Sso\OAuth\SigningKey;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWK;
 use Firebase\JWT\JWT;
+use Firebase\JWT\SignatureInvalidException;
 use Illuminate\Support\Facades\File;
 use Laravel\Passport\Passport;
 use Tests\TestCase;
@@ -92,8 +93,58 @@ class DiscoveryTest extends TestCase
         $jwt = $key->sign(['sub' => '1', 'exp' => time() - 100]);
         [$h, $p, $s] = explode('.', $jwt);
         $bad = $h.'.'.$p.'.'.strrev($s);
-        $this->expectException(\Throwable::class);
+        $this->expectException(SignatureInvalidException::class);
         $key->decode($bad, true);
+    }
+
+    public function test_both_public_endpoints_set_no_cookies(): void
+    {
+        foreach (['/.well-known/openid-configuration', '/oauth2/jwks'] as $path) {
+            $response = $this->get($path)->assertOk();
+            $this->assertSame([], $response->headers->getCookies(), $path);
+            $this->assertNull($response->headers->get('Set-Cookie'), $path);
+        }
+    }
+
+    public function test_decode_rejects_a_token_without_exp_in_both_modes(): void
+    {
+        $key = app(SigningKey::class);
+        $jwt = $key->sign(['sub' => '1']);
+        foreach ([false, true] as $allowExpired) {
+            try {
+                $key->decode($jwt, $allowExpired);
+                $this->fail('token without exp accepted');
+            } catch (\UnexpectedValueException) {
+                $this->assertTrue(true);
+            }
+        }
+    }
+
+    public function test_decode_returns_nested_claims_as_arrays(): void
+    {
+        $key = app(SigningKey::class);
+        $claims = $key->decode($key->sign([
+            'exp' => time() + 60,
+            'events' => ['http://schemas.openid.net/event/backchannel-logout' => new \stdClass],
+            'nested' => ['a' => ['b' => 1]],
+        ]));
+        $this->assertSame([], $claims['events']['http://schemas.openid.net/event/backchannel-logout']);
+        $this->assertSame(1, $claims['nested']['a']['b']);
+    }
+
+    public function test_decode_rejects_alg_none(): void
+    {
+        $b = fn ($a) => rtrim(strtr(base64_encode(json_encode($a)), '+/', '-_'), '=');
+        $jwt = $b(['alg' => 'none', 'typ' => 'JWT']).'.'.$b(['sub' => '1', 'exp' => time() + 60]).'.';
+        $this->expectException(\Throwable::class);
+        app(SigningKey::class)->decode($jwt);
+    }
+
+    public function test_decode_rejects_hs256_signed_with_the_public_key(): void
+    {
+        $jwt = JWT::encode(['sub' => '1', 'exp' => time() + 60], config('passport.public_key'), 'HS256');
+        $this->expectException(\Throwable::class);
+        app(SigningKey::class)->decode($jwt);
     }
 
     public function test_keys_fall_back_to_the_key_files_and_install_never_overwrites(): void

@@ -24,5 +24,14 @@ Route::get('/actuator/health', function () {
     return response()->json(['status' => $up ? 'UP' : 'DOWN'], $up ? 200 : 503);
 });
 
-Route::get('/.well-known/openid-configuration', [DiscoveryController::class, 'configuration']);
-Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);
+Route::withoutMiddleware([
+    \Illuminate\Cookie\Middleware\EncryptCookies::class,
+    \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+    \Illuminate\Session\Middleware\StartSession::class,
+    \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+    \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+    \App\Http\Middleware\RequirePasswordChange::class,
+])->group(function () {
+    Route::get('/.well-known/openid-configuration', [DiscoveryController::class, 'configuration']);
+    Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);
+});

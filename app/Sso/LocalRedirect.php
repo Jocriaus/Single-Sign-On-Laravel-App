@@ -16,7 +16,7 @@ class LocalRedirect
 
     private static function isLocal(string $url): bool
     {
-        if (preg_match('/[\x00-\x20\\\\]/', $url)) {
+        if (preg_match('/[\x00-\x20\x7F\\\\]/', $url)) {
             return false;
         }
 
