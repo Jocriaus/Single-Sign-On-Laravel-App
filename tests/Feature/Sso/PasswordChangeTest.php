@@ -105,4 +105,17 @@ class PasswordChangeTest extends TestCase
     {
         $this->get('/change-password')->assertRedirect('/login');
     }
+
+    public function test_a_new_password_with_surrounding_spaces_is_stored_exactly_as_typed(): void
+    {
+        $user = $this->flagged();
+        $typed = ' spaced passphrase here ';
+        $this->actingAs($user);
+        $this->change(['new_password' => $typed, 'new_password_confirmation' => $typed])->assertRedirect('/');
+        $this->assertTrue(Hash::check($typed, $user->fresh()->password));
+
+        $this->post('/logout');
+        $this->post('/login', ['username' => $user->username, 'password' => $typed])->assertRedirect('/');
+        $this->assertAuthenticatedAs($user);
+    }
 }

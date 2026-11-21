@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\HomeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordChangeController;
+use App\Http\Controllers\OAuth\DiscoveryController;
 use App\Sso\HealthProbe;
 use Illuminate\Support\Facades\Route;
 
@@ -22,3 +23,6 @@ Route::get('/actuator/health', function () {
 
     return response()->json(['status' => $up ? 'UP' : 'DOWN'], $up ? 200 : 503);
 });
+
+Route::get('/.well-known/openid-configuration', [DiscoveryController::class, 'configuration']);
+Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);

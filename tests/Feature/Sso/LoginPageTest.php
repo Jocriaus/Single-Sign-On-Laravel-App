@@ -158,6 +158,8 @@ class LoginPageTest extends TestCase
             'backslash' => ['/\evil.example', '/'],
             'other port' => ['http://localhost:8080/x', '/'],
             'other scheme' => ['https://localhost:8000/x', '/'],
+            'control character' => ["/	/evil.example", '/'],
+            'space' => ['/ /evil.example', '/'],
             'local path' => ['/somewhere', '/somewhere'],
         ];
     }
