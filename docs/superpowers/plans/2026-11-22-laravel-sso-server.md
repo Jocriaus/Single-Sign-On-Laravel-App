@@ -10,6 +10,47 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-22-laravel-sso-server-design.md`. It adopts by reference sections 2, 3, 5 and 6 of `../Single-Sign-On-1/docs/superpowers/specs/2026-11-22-identity-and-app-access-design.md`; read both. The Spring Boot source in `../Single-Sign-On-1/src` is the reference for any wording or behaviour not fixed here.
 
+<!-- progress:begin -->
+## Progress
+
+Last updated: 2026-11-22 07:30. Paused at the owner's request after Task 7. **7 of 22 tasks complete**, each
+built by one agent and reviewed by another. Suite at the pause: 97 tests passing (468 assertions). Work is on
+branch `feature/laravel-sso-server`; nothing has been pushed.
+
+| Task | Status | Commits |
+|------|--------|---------|
+| 1. Project, configuration and health check | Done, review clean | `fddf7ea` |
+| 2. Users, roles and the seeded administrator | Done, review clean | `7cb582d` |
+| 3. Login page, lockout and the signed-in page | Done, review clean | `a7f9517` |
+| 4. Password policy and forced password change | Done, review clean | `1adf14c` |
+| 5. Signing key, discovery and JWKS | Done after one fix round | `b5971b9`, `8b695f9` |
+| 6. Apps (clients) | Done after one fix round | `615c670`, `7f50518` |
+| 7. Sign in to an app (authorize, code exchange, ID token) | Done after one fix round | `d6e01e4`, `7c650a3` |
+| 8 to 22 | Not started | |
+
+**Next:** Task 8 (token policy: refresh, 8-hour cap, account state).
+
+**Carried forward to later tasks** (small points reviewers raised that did not block a task):
+
+- Task 8: add `.rnd` to `.gitignore` (OpenSSL writes that file when PHP runs from PowerShell). One test in
+  `SsoLoginFlowTest` matches SQL quoted with double quotes, which only holds on SQLite.
+- Task 17 (cleanup): revoked access-token rows must be kept for at least 8 hours, because a refresh finds its
+  sign-in through the old token's row. Sign-in rows created for codes that were never exchanged need pruning.
+- Task 18: remove the stock `package.json`, `vite.config.js`, `resources/css` and `resources/js`.
+- Final review: the change-password form does not limit guesses of the current password; the token endpoint
+  decrypts the code or refresh token a second time (about 91 ms); `refuse()` in `AuthorizeController` does not
+  log the library's error; the seeder fails if the `admin` account was soft-deleted.
+
+**Differences from the plan text, decided during the build:**
+
+- phpseclib is version 4 (`phpseclib4\...`), not 3.
+- `sso_sign_ins.auth_time` and `started_at` are `dateTime` columns; MariaDB 10.4 refuses two required
+  `timestamp` columns in one table.
+- `SigningKey::decode` takes a second argument `bool $allowExpired = false` and rejects tokens without `exp`.
+- Discovery and JWKS run without session, cookie and CSRF middleware, so they set no cookies.
+- Redirect addresses are refused if they contain credentials, whitespace or control characters.
+<!-- progress:end -->
+
 ## Global Constraints
 
 - Laravel `^12.0` (PHP is 8.2.12; Laravel 13 needs 8.3). Do not add packages beyond `laravel/passport` and `dedoc/scramble`.
@@ -74,7 +115,7 @@ tests/Feature/{Sso,Accounts,Console,Api,Ops}/
 **Interfaces:**
 - Produces: `config('sso.*')` keys below; `Tests\TestCase` sets Passport keys for every test; guard `api` uses driver `passport`.
 
-- [ ] **Step 1: Create the project in the existing folder** (it already holds `.git` and `docs/`)
+- [x] **Step 1: Create the project in the existing folder** (it already holds `.git` and `docs/`)
 
 ```bash
 cd /c/xampp/htdocs
@@ -86,7 +127,7 @@ php artisan vendor:publish --tag=passport-migrations
 git checkout -b feature/laravel-sso-server
 ```
 
-- [ ] **Step 2: Write the failing test** `tests/Feature/Ops/HealthCheckTest.php`
+- [x] **Step 2: Write the failing test** `tests/Feature/Ops/HealthCheckTest.php`
 
 ```php
 public function test_health_check_is_public_and_shows_only_the_status(): void
@@ -104,9 +145,9 @@ public function test_health_check_reports_down_when_the_database_is_unreachable(
 
 `App\Sso\HealthProbe::databaseIsUp(): bool` runs `DB::connection()->getPdo()` and returns false on any exception. (The `DB` facade itself is not mocked: `RefreshDatabase` needs it.)
 
-- [ ] **Step 3: Run** `php artisan test --filter=HealthCheckTest`. Expected: FAIL, 404.
+- [x] **Step 3: Run** `php artisan test --filter=HealthCheckTest`. Expected: FAIL, 404.
 
-- [ ] **Step 4: Configure**
+- [x] **Step 4: Configure**
 
 `config/sso.php` returns exactly these keys:
 
@@ -132,11 +173,11 @@ public function test_health_check_reports_down_when_the_database_is_unreachable(
 
 `tests/TestCase.php`: use `RefreshDatabase`; in `setUp`, set `config(['passport.private_key' => ..., 'passport.public_key' => ...])` from one RSA 2048 pair created once per process with `phpseclib3\Crypt\RSA::createKey(2048)` (kept in a static property). Do not call `openssl_pkey_new`; it fails on XAMPP without `OPENSSL_CONF`.
 
-- [ ] **Step 5: Implement** `app/Sso/HealthProbe.php` and `GET /actuator/health` in `routes/web.php`: `databaseIsUp()` true → 200 `{"status":"UP"}`; false → 503 `{"status":"DOWN"}`.
+- [x] **Step 5: Implement** `app/Sso/HealthProbe.php` and `GET /actuator/health` in `routes/web.php`: `databaseIsUp()` true → 200 `{"status":"UP"}`; false → 503 `{"status":"DOWN"}`.
 
-- [ ] **Step 6: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 6: Run** `php artisan test`. Expected: PASS.
 
-- [ ] **Step 7: Commit** `git add -A && git commit -m "Laravel 12 skeleton, Passport, SSO settings and health check"`
+- [x] **Step 7: Commit** `git add -A && git commit -m "Laravel 12 skeleton, Passport, SSO settings and health check"`
 
 ### Task 2: Users, roles and the seeded administrator
 
@@ -156,7 +197,7 @@ public function test_health_check_reports_down_when_the_database_is_unreachable(
   - `Activity::log(?User $user, string $activity, string $type, ?string $module = null): void`; types `CREATE, UPDATE, DELETE, READ, AUTH`
   - `UserFactory` states: `student()`, `employee()`, `adminType()`, `withRole(string $name)`, `mustChangePassword()`, `disabled()`; default password `correct-horse-battery`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```php
 // SeedTest
@@ -193,19 +234,19 @@ public function test_roles_follow_the_numbers_a_person_holds(): void
 public function test_assigned_roles_are_left_alone(): void   // user with ADMIN + student_no keeps ADMIN, gains STUDENT
 ```
 
-- [ ] **Step 2: Run** `php artisan test --filter="SeedTest|AutomaticRolesTest"`. Expected: FAIL.
+- [x] **Step 2: Run** `php artisan test --filter="SeedTest|AutomaticRolesTest"`. Expected: FAIL.
 
-- [ ] **Step 3: Write the migrations**
+- [x] **Step 3: Write the migrations**
 
 `users`: `id`, `username` string unique not null, `email` string unique, `password`, `user_type_id` foreign to `user_types`, `status_flag` boolean default true, `first_name`, `middle_name` nullable strings, `middle_initial` string(20) nullable, `last_name` nullable, `suffix` string(20) nullable, `student_no` string(50) nullable unique, `employee_no` string(50) nullable unique, `password_changed_at` timestamp nullable, `failed_attempts` unsigned int default 0, `account_locked` boolean default false, `locked_until` timestamp nullable, `must_change_password` boolean default false, `timestamps`, `softDeletes`. Remove `name`, `email_verified_at`, `remember_token`. Keep the skeleton's `sessions` table; drop `password_reset_tokens`.
 
 Others: `user_types(id, user_type_name, user_type_description)`; `roles(id, role_name unique string(100), role_description text nullable, timestamps)`; `role_user(user_id, role_id, timestamps, unique[user_id, role_id])`; `activity_logs(id, user_id nullable, activity string, activity_type string(60), module nullable, created_at)`; `api_audit_logs(id, user_id nullable, client_id nullable string, endpoint, http_method string(10), ip_address string(50) nullable, user_agent nullable, status_code int, status string(20), error_code string(50) nullable, message text nullable, request_body text nullable, response_body text nullable, created_at indexed)`.
 
-- [ ] **Step 4: Implement** the models, `AutomaticRoles`, `Activity`, the factory states and `SsoSeeder` (called from `DatabaseSeeder`; idempotent with `firstOrCreate`). `User` stores `username` trimmed (mutator); a `saving` hook throws `ValidationException` with "This sign-in number is already used by another account." when another row has the same lower-cased username.
+- [x] **Step 4: Implement** the models, `AutomaticRoles`, `Activity`, the factory states and `SsoSeeder` (called from `DatabaseSeeder`; idempotent with `firstOrCreate`). `User` stores `username` trimmed (mutator); a `saving` hook throws `ValidationException` with "This sign-in number is already used by another account." when another row has the same lower-cased username.
 
-- [ ] **Step 5: Run** `php artisan test`. Expected: PASS. Run `php artisan migrate:fresh --seed` against MariaDB. Expected: no errors.
+- [x] **Step 5: Run** `php artisan test`. Expected: PASS. Run `php artisan migrate:fresh --seed` against MariaDB. Expected: no errors.
 
-- [ ] **Step 6: Commit** `git commit -am "Identity-only users, four standard roles, seeded admin"`
+- [x] **Step 6: Commit** `git commit -am "Identity-only users, four standard roles, seeded admin"`
 
 ### Task 3: Login page, lockout and the signed-in page
 
@@ -223,7 +264,7 @@ Others: `user_types(id, user_type_name, user_type_description)`; `roles(id, role
 
 Copy the look and markup of `../Single-Sign-On-1/src/main/resources/templates/login.html` and `fragments/style.html`. The first field's label is "Student or employee number" with the hint "Administrators: use your admin username."
 
-- [ ] **Step 1: Write the failing tests** (each seeds, then posts to `/login` with `username`, `password`)
+- [x] **Step 1: Write the failing tests** (each seeds, then posts to `/login` with `username`, `password`)
 
 | Test | Asserts |
 |------|---------|
@@ -240,13 +281,13 @@ Copy the look and markup of `../Single-Sign-On-1/src/main/resources/templates/lo
 | `test_sign_out_ends_the_session_and_says_so` | `POST /logout` → `/login?logout`; page shows "You've signed out."; guest |
 | `test_after_sign_in_the_browser_returns_only_to_a_local_address` | intended URL `https://evil.example/` is ignored → `/` |
 
-- [ ] **Step 2: Run** `php artisan test --filter=LoginPageTest`. Expected: FAIL.
+- [x] **Step 2: Run** `php artisan test --filter=LoginPageTest`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** Order inside `LoginController::attempt`: find the user; if missing, or the password is wrong, call `recordFailure` (when found and not already locked) and return the generic error; only then check locked, then disabled. On success: `Lockout::clear`, `Auth::login`, `session()->regenerate()`, write the four `sso.*` keys, log, `redirect()->intended('/')`. `LoginController::show` passes `$appName` from the client named in the intended `/oauth2/authorize` URL's `client_id`, when there is one.
+- [x] **Step 3: Implement.** Order inside `LoginController::attempt`: find the user; if missing, or the password is wrong, call `recordFailure` (when found and not already locked) and return the generic error; only then check locked, then disabled. On success: `Lockout::clear`, `Auth::login`, `session()->regenerate()`, write the four `sso.*` keys, log, `redirect()->intended('/')`. `LoginController::show` passes `$appName` from the client named in the intended `/oauth2/authorize` URL's `client_id`, when there is one.
 
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
 
-- [ ] **Step 5: Commit** `git commit -am "Login page with lockout and activity log"`
+- [x] **Step 5: Commit** `git commit -am "Login page with lockout and activity log"`
 
 ### Task 4: Password policy and forced password change
 
@@ -259,7 +300,7 @@ Copy the look and markup of `../Single-Sign-On-1/src/main/resources/templates/lo
 
 Port `../Single-Sign-On-1/src/main/java/com/bulsu/single_sign_on/security/PasswordPolicy.java` exactly: same blocklist, same four messages, same order of checks.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```php
 // PasswordPolicyTest
@@ -282,10 +323,10 @@ $this->assertSame([], $p->problems('correct-horse-battery', 'juan'));
 | `test_changing_the_password_clears_the_flag_and_continues_where_the_user_was_going` | flag false, `password_changed_at` set, activity row, redirect to the URL saved before the redirect |
 | `test_anyone_signed_in_may_change_their_password` | no flag: `GET /change-password` is 200 |
 
-- [ ] **Step 2: Run** the two test classes. Expected: FAIL.
-- [ ] **Step 3: Implement.** The middleware applies to signed-in web requests only; it lets through paths starting with `/change-password`, `/login`, `/logout`, `/connect/logout`, `/.well-known/`, `/oauth2/jwks`, `/actuator/health`, `/up`; on GET it saves the URL as the intended URL before redirecting.
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Password policy and forced password change"`
+- [x] **Step 2: Run** the two test classes. Expected: FAIL.
+- [x] **Step 3: Implement.** The middleware applies to signed-in web requests only; it lets through paths starting with `/change-password`, `/login`, `/logout`, `/connect/logout`, `/.well-known/`, `/oauth2/jwks`, `/actuator/health`, `/up`; on GET it saves the URL as the intended URL before redirecting.
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Password policy and forced password change"`
 
 ### Task 5: Signing key, discovery and JWKS
 
@@ -306,7 +347,7 @@ Keys are read the way Passport reads them: `config('passport.private_key')` / `p
 
 In `AppServiceProvider::boot`: `Passport::ignoreRoutes()` (in `register`), `Passport::tokensCan([...])` for the four scopes, `Passport::tokensExpireIn(15 minutes)`, `Passport::refreshTokensExpireIn(8 hours)`, both from `config('sso')`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```php
 public function test_discovery_document_lists_this_servers_endpoints(): void
@@ -342,10 +383,10 @@ public function test_jwks_publishes_the_key_that_signs_tokens(): void
 }
 ```
 
-- [ ] **Step 2: Run** `php artisan test --filter=DiscoveryTest`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Derive `n` and `e` with `openssl_pkey_get_details(openssl_pkey_get_public($pem))['rsa']`.
-- [ ] **Step 4: Run** `php artisan test`, then `php artisan sso:install` twice. Expected: PASS; the second run reports the key already exists.
-- [ ] **Step 5: Commit** `git commit -am "Signing key, discovery document and JWKS"`
+- [x] **Step 2: Run** `php artisan test --filter=DiscoveryTest`. Expected: FAIL.
+- [x] **Step 3: Implement.** Derive `n` and `e` with `openssl_pkey_get_details(openssl_pkey_get_public($pem))['rsa']`.
+- [x] **Step 4: Run** `php artisan test`, then `php artisan sso:install` twice. Expected: PASS; the second run reports the key already exists.
+- [x] **Step 5: Commit** `git commit -am "Signing key, discovery document and JWKS"`
 
 ### Task 6: Apps (clients)
 
@@ -364,7 +405,7 @@ public function test_jwks_publishes_the_key_that_signs_tokens(): void
 
 Migrations: change `oauth_clients.id` to `string('id', 100)->primary()` and every `client_id` in the other Passport tables to `string('client_id', 100)->index()`. Add to `oauth_clients`: `scopes` text nullable, `post_logout_redirect_uris` text nullable, `backchannel_logout_uri` string nullable, `allowed_roles` text nullable, `require_pkce` boolean default true. Add `sign_in_id` string(36) nullable indexed to `oauth_auth_codes` and `oauth_access_tokens` (used in Task 7). `Passport::useClientModel(Client::class)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -380,10 +421,10 @@ Migrations: change `oauth_clients.id` to `string('id', 100)->primary()` and ever
 | `test_a_new_secret_stops_the_old_one` | old fails `Hash::check`, new passes |
 | `test_an_app_can_be_given_a_fixed_id_and_secret` | `register($data, 'sso-admin-console', 'given-secret')` → id as given; `Hash::check('given-secret', ...)` |
 
-- [ ] **Step 2: Run** `php artisan test --filter=ClientRegistrarTest`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Secret: `Str::random(48)`. Assign `secret` in plain text; Passport's model hashes it.
-- [ ] **Step 4: Run** `php artisan test` and `php artisan migrate:fresh --seed`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "App registration with scopes, logout addresses and access rules"`
+- [x] **Step 2: Run** `php artisan test --filter=ClientRegistrarTest`. Expected: FAIL.
+- [x] **Step 3: Implement.** Secret: `Str::random(48)`. Assign `secret` in plain text; Passport's model hashes it.
+- [x] **Step 4: Run** `php artisan test` and `php artisan migrate:fresh --seed`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "App registration with scopes, logout addresses and access rules"`
 
 ### Task 7: Sign in to an app (authorize, code exchange, ID token)
 
@@ -412,7 +453,7 @@ How the pieces fit (all in one request each):
 7. **`IdTokenResponse`** (extends `League\OAuth2\Server\ResponseTypes\BearerTokenResponse`, set with `Passport::useAuthorizationServerResponseType`): `getExtraParams` returns `['id_token' => ...]` when the token's scopes include `openid` and the context has a sign-in; `withNonce` is `! isRefresh()`.
 8. **ID token claims**: `iss`, `sub`, `aud` (client id), `iat`, `exp` (+15 min), `auth_time`, `sid`, `roles`, `user_type`; `nonce` when asked and present; with `profile`: `preferred_username`, `name`; with `email`: `email`.
 
-- [ ] **Step 1: Write `OAuthFlow`**, then the failing tests
+- [x] **Step 1: Write `OAuthFlow`**, then the failing tests
 
 ```php
 public function test_full_flow_browser_to_tokens(): void
@@ -475,10 +516,10 @@ public function test_full_flow_browser_to_tokens(): void
 | `test_client_secret_basic_and_post_both_work` | `exchange(..., 'basic')` and `'post'` → 200 |
 | `test_every_token_has_the_kid_of_the_published_key` | header `kid` of access and ID token equals `SigningKey::kid()` |
 
-- [ ] **Step 2: Run** `php artisan test --filter=SsoLoginFlowTest`. Expected: FAIL.
-- [ ] **Step 3: Implement** in the order of the list above. League's `AuthCodeGrant` accepts a request without `code_challenge` from a confidential client, so `AuthorizeController` rejects it before completing when the client's `require_pkce` is true (the default; Task 19 covers apps with it switched off).
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Authorization code flow with PKCE and ID tokens"`
+- [x] **Step 2: Run** `php artisan test --filter=SsoLoginFlowTest`. Expected: FAIL.
+- [x] **Step 3: Implement** in the order of the list above. League's `AuthCodeGrant` accepts a request without `code_challenge` from a confidential client, so `AuthorizeController` rejects it before completing when the client's `require_pkce` is true (the default; Task 19 covers apps with it switched off).
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Authorization code flow with PKCE and ID tokens"`
 
 ### Task 8: Token policy (refresh, 8-hour cap, account state)
 
