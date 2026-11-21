@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('oauth_clients', function (Blueprint $table) {
-            $table->uuid('id')->primary();
+            $table->string('id', 100)->primary();
             $table->nullableMorphs('owner');
             $table->string('name');
             $table->string('secret')->nullable();
@@ -20,6 +20,11 @@ return new class extends Migration
             $table->text('redirect_uris');
             $table->text('grant_types');
             $table->boolean('revoked');
+            $table->text('scopes')->nullable();
+            $table->text('post_logout_redirect_uris')->nullable();
+            $table->string('backchannel_logout_uri')->nullable();
+            $table->text('allowed_roles')->nullable();
+            $table->boolean('require_pkce')->default(true);
             $table->timestamps();
         });
     }

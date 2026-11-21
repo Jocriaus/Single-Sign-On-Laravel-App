@@ -24,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Passport::useClientModel(Client::class);
         Passport::tokensCan([
             'openid' => 'Verify your identity',
             'profile' => 'View your name and account type',

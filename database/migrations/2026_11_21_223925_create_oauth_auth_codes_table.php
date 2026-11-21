@@ -14,7 +14,8 @@ return new class extends Migration
         Schema::create('oauth_auth_codes', function (Blueprint $table) {
             $table->char('id', 80)->primary();
             $table->foreignId('user_id')->index();
-            $table->foreignUuid('client_id');
+            $table->string('client_id', 100)->index();
+            $table->string('sign_in_id', 36)->nullable()->index();
             $table->text('scopes')->nullable();
             $table->boolean('revoked');
             $table->dateTime('expires_at')->nullable();
