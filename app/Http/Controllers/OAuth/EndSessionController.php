@@ -55,7 +55,7 @@ class EndSessionController extends Controller
             return null;
         }
 
-        return Client::find($aud);
+        return Client::findById($aud);
     }
 
     /** Back to the app only at an address it registered for this; anywhere else, the login page. */

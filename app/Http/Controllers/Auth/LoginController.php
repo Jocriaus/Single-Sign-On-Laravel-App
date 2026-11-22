@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\User;
 use App\Sso\Accounts\Lockout;
 use App\Sso\Activity;
@@ -13,7 +14,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Laravel\Passport\Client;
 
 class LoginController extends Controller
 {
@@ -107,6 +107,6 @@ class LoginController extends Controller
         parse_str((string) parse_url($intended, PHP_URL_QUERY), $query);
         $id = $query['client_id'] ?? null;
 
-        return is_string($id) && $id !== '' ? Client::query()->whereKey($id)->value('name') : null;
+        return Client::findById($id)?->name;
     }
 }

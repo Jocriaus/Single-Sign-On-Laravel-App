@@ -89,7 +89,7 @@ return [
          */
         'scalar' => [
             'view' => 'scramble::scalar',
-            'cdn' => 'https://cdn.jsdelivr.net/npm/@scalar/api-reference',
+            'cdn' => 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.82.1',
             'theme' => 'laravel',
             'proxyUrl' => null,
             'darkMode' => false,

@@ -147,4 +147,14 @@ class ApiDocsTest extends TestCase
             ->getJson('/api/v1/client/')
             ->assertOk();
     }
+
+    public function test_the_viewer_script_is_pinned_to_an_exact_version(): void
+    {
+        $user = User::factory()->employee()->withRole('ICTO_ADMIN')->create();
+
+        $this->assertMatchesRegularExpression(
+            '#@scalar/api-reference@\d#',
+            $this->signInToSso($user)->get('/docs/api')->getContent(),
+        );
+    }
 }

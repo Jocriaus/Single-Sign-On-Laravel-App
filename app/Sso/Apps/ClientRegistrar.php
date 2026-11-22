@@ -18,6 +18,10 @@ class ClientRegistrar
      */
     public function register(array $data, ?string $id = null, ?string $secret = null): array
     {
+        if ($id !== null && ! Client::validId($id)) {
+            throw new \InvalidArgumentException('A client id is 1 to 100 letters, digits or hyphens.');
+        }
+
         $attributes = $this->attributes($data);
         $secret ??= Str::random(48);
 

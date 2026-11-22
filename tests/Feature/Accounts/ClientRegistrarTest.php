@@ -192,4 +192,19 @@ class ClientRegistrarTest extends TestCase
         $this->assertSame(Client::class, \Laravel\Passport\Passport::clientModel());
         $this->assertInstanceOf(Client::class, app(\Laravel\Passport\ClientRepository::class)->find($client->id));
     }
+
+    public function test_an_explicit_id_that_could_never_be_found_is_refused(): void
+    {
+        foreach (['has space', 'a/b', str_repeat('a', 101), ''] as $id) {
+            try {
+                $this->registrar()->register($this->data(), $id);
+                $this->fail("Accepted id [$id]");
+            } catch (\InvalidArgumentException) {
+                $this->assertSame(0, Client::count());
+            }
+        }
+
+        $this->registrar()->register($this->data(), 'sso-admin-console');
+        $this->assertNotNull(Client::findById('sso-admin-console'));
+    }
 }
