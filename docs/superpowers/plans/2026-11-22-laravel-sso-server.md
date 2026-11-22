@@ -13,9 +13,9 @@
 <!-- progress:begin -->
 ## Progress
 
-Last updated: 2026-11-22 07:30. Paused at the owner's request after Task 7. **7 of 22 tasks complete**, each
-built by one agent and reviewed by another. Suite at the pause: 97 tests passing (468 assertions). Work is on
-branch `feature/laravel-sso-server`; nothing has been pushed.
+Last updated: 2026-11-22 12:50. **18 of 22 tasks complete**, each built by one agent and reviewed by another.
+Task 19 is being built. The owner has asked to stop after Task 20. Suite at Task 18: 297 tests passing
+(1820 assertions). Work is on branch `feature/laravel-sso-server`.
 
 | Task | Status | Commits |
 |------|--------|---------|
@@ -26,29 +26,121 @@ branch `feature/laravel-sso-server`; nothing has been pushed.
 | 5. Signing key, discovery and JWKS | Done after one fix round | `b5971b9`, `8b695f9` |
 | 6. Apps (clients) | Done after one fix round | `615c670`, `7f50518` |
 | 7. Sign in to an app (authorize, code exchange, ID token) | Done after one fix round | `d6e01e4`, `7c650a3` |
-| 8 to 22 | Not started | |
+| 8. Token policy | Done, review clean | `07c0d1c` |
+| 9. User info and the API's own tokens | Done, review clean | `8c9e6d9` |
+| 10. Per-app access | Done, review clean | `d08218f` |
+| 11. Signing out everywhere | Done, review clean | `5ec232e` |
+| 12. Account rules and admin levels | Done after one fix round | `73be513`, `621f11e` |
+| 13. Admin console: access, overview and apps | Done, review clean | `fd253ba` |
+| 14. Admin console: users | Done, review clean | `8aa4f65` |
+| 15. Admin API and the audit trail | Done after one fix round | `ee53ef5`, `12f947c` |
+| 16. API documentation with Scramble | Done after one fix round | `f56ae99`, `4c24b49` |
+| 17. Rate limits, cleanup and the settings check | Done after one fix round | `b687a7b`, `cb83275` |
+| 18. Documentation and end-to-end check | Done, review clean | `96d7503` |
+| 19. Authorize parameters and optional PKCE | Being built | |
+| 20. Standard claims, discovery and user info | Next; the last task before the requested stop | |
+| 21. Logout strictness | Not started | |
+| 22. Run the conformance suite | Not started; needs the owner's go-ahead | |
 
-**Next:** Task 8 (token policy: refresh, 8-hour cap, account state).
+### What remains
 
-**Carried forward to later tasks** (small points reviewers raised that did not block a task):
+**Tasks still to build**
 
-- Task 8: add `.rnd` to `.gitignore` (OpenSSL writes that file when PHP runs from PowerShell). One test in
-  `SsoLoginFlowTest` matches SQL quoted with double quotes, which only holds on SQLite.
-- Task 17 (cleanup): revoked access-token rows must be kept for at least 8 hours, because a refresh finds its
-  sign-in through the old token's row. Sign-in rows created for codes that were never exchanged need pruning.
-- Task 18: remove the stock `package.json`, `vite.config.js`, `resources/css` and `resources/js`.
-- Final review: the change-password form does not limit guesses of the current password; the token endpoint
-  decrypts the code or refresh token a second time (about 91 ms); `refuse()` in `AuthorizeController` does not
-  log the library's error; the seeder fails if the `admin` account was soft-deleted.
+1. **Task 19** (in progress): `prompt`, `max_age`, POST to the authorize endpoint, request objects refused,
+   PKCE as a per-app setting, tokens revoked when a code is reused.
+2. **Task 20**: standard name claims (`given_name`, `family_name`, `middle_name`, `updated_at`), a fuller
+   discovery document, access token accepted in a POST body at `/userinfo`. Also the README corrections listed
+   below.
+3. **Task 21**: stricter sign-out. A forged or altered `id_token_hint`, or an unregistered return address,
+   gets an error page and the session is left alone. This replaces Task 11's rule and its test.
+4. **Task 22**: run the OpenID Foundation conformance suite (Basic OP plan, 38 modules) locally in Docker, fix
+   what fails, and write `docs/conformance.md`. The Config and both logout plans need HTTPS, so they wait for
+   a deployed server.
 
-**Differences from the plan text, decided during the build:**
+**After the tasks**
+
+5. One review of the whole branch on the most capable model, then one round of fixes for what it finds. It
+   should triage the deferred points below.
+6. Decide how the branch is merged (pull request or direct merge). The owner pushed the branch at Task 7;
+   commits since then are local only.
+
+**Needs the owner**
+
+- **Go-ahead for Task 22.** It adds `127.0.0.1 localhost.emobix.co.uk` to the Windows `hosts` file
+  (administrator prompt) and pulls and runs the conformance suite's Docker images.
+- **Browser check of `/docs/api`.** Nobody has signed in from the documentation page. Steps: set
+  `SSO_ADMIN_CLIENT_SECRET` to 32 random characters, run `php artisan sso:install` and `php artisan serve`,
+  sign in as an ICTO admin, open `/docs/api`, choose the OAuth2 authorization-code option, enter client id
+  `sso-admin-console` and the secret, tick all scopes, authorize, then send `GET /v1/user/me`. Two things may
+  fail: the viewer may use a redirect address other than `{issuer}/docs/api`, and it may not send PKCE, which
+  the admin client requires. The fallback is pasting an access token.
+- **Confirm a decision made during the build:** only an ICTO admin can create an admin-type account or change
+  an account to that type.
+- **Deployment choices:** PHP-FPM or Apache mod_php (under mod_php the browser waits up to about 5 seconds per
+  app that does not answer a logout notice); the value of `SSO_TRUSTED_PROXIES`.
+- **PostgreSQL** has never been run. The migrations use portable types, but this is untested.
+- **Certification** (USD 700 for members, USD 3,500 for non-members) is the owner's decision after deployment.
+
+**README corrections handed to Task 20**
+
+- "up to about 8 seconds" per unanswering app should be about 5 seconds.
+- Production checklist: add `APP_KEY`; terminate TLS in front of the server; keep the signing key file out of
+  git with restricted permissions; use a dedicated database account; sign in as `admin` and change its
+  password before the server is exposed.
+- Replace the internal wording "latest approved design" and "Milestone 5".
+
+**Deferred points for the whole-branch review** (raised by reviewers; none blocked a task)
+
+*Security hardening*
+
+- The change-password form does not limit guesses of the current password.
+- `AccountService` checks permission and then writes without a row lock. Two ICTO admins acting on each other
+  in the same instant could slip past the one-at-a-time rules; a backstop check exists but is tested only
+  directly.
+- `/userinfo` returns Laravel's debug JSON on an unexpected error when `APP_DEBUG` is true.
+- The documentation page's viewer script is pinned to a version but has no integrity hash.
+- `state` on sign-out has no length limit; an app's logout address is written to the log as registered.
+- Passport logs every rejected bearer token as an error with a stack trace.
+
+*Robustness*
+
+- The token endpoint decrypts the code or refresh token a second time (about 91 ms). The ids could be captured
+  from the library's own hooks instead, which would also remove the expiry reset in `AccessTokenRepository`.
+- A sign-in record is created before its code is issued; abandoned ones are removed by cleanup after 8 hours.
+- Logout notices are not undone if a later step in the same request fails.
+- `refuse()` in `AuthorizeController` does not log the library's error.
+- The seeder fails if the `admin` account was soft-deleted.
+- A failed confirm checkbox in the console redirects to the previous page, not the user's page.
+- Console and API search does not escape `%` and `_`.
+- The rate limiter counts successful sign-ins too; a campus network with more than 30 sign-ins a minute from
+  one address would be refused.
+
+*Tests worth adding*
+
+- An expired lock no longer blocks a refresh; the new refresh token's expiry after a rotation.
+- `/userinfo` with `openid email` only and with `openid profile` only; locked and must-change-password
+  accounts refused at `/userinfo` and the API.
+- A user with no roles against an app with no rule; refusal by an access rule on the code exchange.
+- A sign-out hint for one app with a return address registered only for another.
+- The overview page's exact counts and its 20-row limit.
+- Cleanup batching (the current test would pass without batching).
+
+**Differences from the plan text, decided during the build**
 
 - phpseclib is version 4 (`phpseclib4\...`), not 3.
 - `sso_sign_ins.auth_time` and `started_at` are `dateTime` columns; MariaDB 10.4 refuses two required
   `timestamp` columns in one table.
 - `SigningKey::decode` takes a second argument `bool $allowExpired = false` and rejects tokens without `exp`.
-- Discovery and JWKS run without session, cookie and CSRF middleware, so they set no cookies.
+- Discovery, JWKS, the token endpoint and `/userinfo` run without session, cookie and CSRF middleware.
 - Redirect addresses are refused if they contain credentials, whitespace or control characters.
+- Client ids must match `[A-Za-z0-9-]{1,100}`; Passport's UUID-only check was relaxed to allow
+  `sso-admin-console`.
+- The API audit step runs for every request under `/api`, including addresses that match no route.
+- Added `PUT /api/v1/admin/user/{id}/enable`, which the Spring Boot API lacks.
+- Added the setting `SSO_TRUSTED_PROXIES`.
+- Cleanup keeps any access-token record a live refresh token still depends on.
+- Only ICTO admins may create or switch to admin-type accounts.
+- The Scalar viewer's third-party proxy is switched off.
 <!-- progress:end -->
 
 ## Global Constraints
@@ -531,7 +623,7 @@ public function test_full_flow_browser_to_tokens(): void
 - Consumes: `SignInContext`, `UserClaims::inactiveReason`.
 - Produces: `AccessTokenRepository::persistNewAccessToken` throws `League\OAuth2\Server\Exception\OAuthServerException::invalidGrant($hint)` before saving when: the sign-in can't be found; the user no longer exists ("This account no longer exists."); `inactiveReason` is not null (its text); on refresh, `started_at + 8 h` is past ("The sign-in has expired. Sign in again.").
 
-- [ ] **Step 1: Write the failing tests** (`refresh($app, $refreshToken)` posts `grant_type=refresh_token` with the client secret)
+- [x] **Step 1: Write the failing tests** (`refresh($app, $refreshToken)` posts `grant_type=refresh_token` with the client secret)
 
 | Test | Asserts |
 |------|---------|
@@ -546,10 +638,10 @@ public function test_full_flow_browser_to_tokens(): void
 | `test_deleted_user_cannot_refresh` | soft-deleted → 400 `invalid_grant` |
 | `test_refresh_token_expires_after_eight_hours` | `refresh_token` row `expires_at` is issue time + 8 h |
 
-- [ ] **Step 2: Run** `php artisan test --filter=TokenPolicyTest`. Expected: FAIL on the cap and account-state tests.
-- [ ] **Step 3: Implement** the checks.
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Token policy: rotation, absolute cap, account state at every issue"`
+- [x] **Step 2: Run** `php artisan test --filter=TokenPolicyTest`. Expected: FAIL on the cap and account-state tests.
+- [x] **Step 3: Implement** the checks.
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Token policy: rotation, absolute cap, account state at every issue"`
 
 ### Task 9: User info and the API's own tokens
 
@@ -563,7 +655,7 @@ public function test_full_flow_browser_to_tokens(): void
   - `ApiResponse::success(string $message, mixed $data = null, int $status = 200): JsonResponse` and `ApiResponse::error(string $errorCode, string $message, int $status = 400, mixed $data = null): JsonResponse`, both producing `success, message, data, timestamp, status, errorCode, error`.
   - `GET|POST /userinfo` and `GET /api/v1/user/me`, both behind `auth:api`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -576,10 +668,10 @@ public function test_full_flow_browser_to_tokens(): void
 | `test_an_id_token_is_not_accepted_as_an_access_token` | 401 |
 | `test_unknown_api_address_is_404_json` | `errorCode` `NOT_FOUND`; body has no exception message |
 
-- [ ] **Step 2: Run** the two classes. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "User info endpoint and token-protected API"`
+- [x] **Step 2: Run** the two classes. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "User info endpoint and token-protected API"`
 
 ---
 
@@ -594,7 +686,7 @@ public function test_full_flow_browser_to_tokens(): void
 **Interfaces:**
 - Produces: `AppAccess::allows(Client $client, User $user): bool` — true when `allowed_roles` is empty, or the user holds any role in it.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -606,10 +698,10 @@ public function test_full_flow_browser_to_tokens(): void
 | `test_role_removed_after_sign_in_fails_the_next_refresh` | — |
 | `test_the_admin_console_is_never_subject_to_app_rules` | an ICTO admin holding no role in any rule still opens `/` |
 
-- [ ] **Step 2: Run** `php artisan test --filter=AppAccessTest`. Expected: FAIL.
-- [ ] **Step 3: Implement.** In `AuthorizeController` the check comes after request validation and before the `SignIn` is created. In the repository it comes after the account-state checks; hint "This account does not have access to this app."
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Per-app access rules at sign-in and at every token issue"`
+- [x] **Step 2: Run** `php artisan test --filter=AppAccessTest`. Expected: FAIL.
+- [x] **Step 3: Implement.** In `AuthorizeController` the check comes after request validation and before the `SignIn` is created. In the repository it comes after the account-state checks; hint "This account does not have access to this app."
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Per-app access rules at sign-in and at every token issue"`
 
 ### Task 11: Signing out everywhere
 
@@ -629,7 +721,7 @@ Logout token: header `typ: logout+jwt` and `kid`; claims `iss`, `aud` (client id
 
 `GET|POST /connect/logout` accepts `id_token_hint`, `client_id`, `post_logout_redirect_uri`, `state`. Decode the hint with `SigningKey` ignoring expiry; the app is its `aud`. If there is an SSO session: `signOutSession`, then end the session. Redirect to `post_logout_redirect_uri` (with `state`) only if it is registered for that app; otherwise to `/login?logout`.
 
-- [ ] **Step 1: Write the failing tests** (use `Http::fake()`; `Http::assertSent` inspects the token with `claims()`)
+- [x] **Step 1: Write the failing tests** (use `Http::fake()`; `Http::assertSent` inspects the token with `claims()`)
 
 | Test | Asserts |
 |------|---------|
@@ -647,11 +739,11 @@ Logout token: header `typ: logout+jwt` and `kid`; claims `iss`, `aud` (client id
 | `test_a_logout_token_is_not_accepted_as_an_access_token` | `/userinfo` with it → 401 |
 | `test_a_session_whose_username_now_belongs_to_someone_else_ends` | change the username in the database → next request redirects to `/login` |
 
-- [ ] **Step 2: Run** `php artisan test --filter=BackChannelLogoutTest`. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Verify by hand with the source's starter kit.** In `../Single-Sign-On-1/starter-kits/express`: set `SSO_ISSUER=http://localhost:8000` and the id and secret of an app registered with `php artisan tinker` through `ClientRegistrar`; run `php artisan serve` and the kit. Expected: sign in with the SSO password, see the claims, sign out, and the SSO asks for the password again. Note anything the kit rejects and fix it here before continuing.
-- [ ] **Step 6: Commit** `git commit -am "Single logout: RP-initiated and back-channel"`
+- [x] **Step 2: Run** `php artisan test --filter=BackChannelLogoutTest`. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Verify by hand with the source's starter kit.** In `../Single-Sign-On-1/starter-kits/express`: set `SSO_ISSUER=http://localhost:8000` and the id and secret of an app registered with `php artisan tinker` through `ClientRegistrar`; run `php artisan serve` and the kit. Expected: sign in with the SSO password, see the claims, sign out, and the SSO asks for the password again. Note anything the kit rejects and fix it here before continuing.
+- [x] **Step 6: Commit** `git commit -am "Single logout: RP-initiated and back-channel"`
 
 ---
 
@@ -678,7 +770,7 @@ Logout token: header `typ: logout+jwt` and `kid`; claims `iss`, `aud` (client id
 
 Rules are those of the identity design, sections 2 and 3. In short: Student needs `student_no`, Employee needs `employee_no`, either may hold both; Admin type holds neither; first and last name required except for Admin type; numbers unique within their kind only; `username` defaults to the main number when empty; `sync` automatic roles after every create and update; a changed username calls `signOutEverywhere` before saving. An `ADMIN` actor may act only on users for whom `hasAssignedRole()` is false, and may never call `setRoles`. An `ICTO_ADMIN` may not remove their own `ICTO_ADMIN` role or disable themselves. `setRoles` ignores `STUDENT` and `EMPLOYEE` in its input.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | `AccountRulesTest` | Asserts |
 |------|---------|
@@ -703,10 +795,10 @@ Rules are those of the identity design, sections 2 and 3. In short: Student need
 | `test_icto_admin_cannot_remove_their_own_role_or_disable_themselves` | throws; role and state unchanged |
 | `test_every_action_is_logged_with_who_did_it` | activity rows name the actor's username |
 
-- [ ] **Step 2: Run** both classes. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Account rules, automatic roles and the two admin levels"`
+- [x] **Step 2: Run** both classes. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Account rules, automatic roles and the two admin levels"`
 
 ### Task 13: Admin console: access, overview and apps
 
@@ -720,7 +812,7 @@ Rules are those of the identity design, sections 2 and 3. In short: Student need
 
 Carry the layout and wording of `../Single-Sign-On-1/src/main/resources/templates/admin/`. Additions: on the app form, a "Who can sign in" section with "Everyone with an active account" or "Only people with these roles" and a checkbox per role, and a checkbox "May administer the SSO (sso.admin)". The apps list shows a summary: "Everyone", or the role names joined by ", ".
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -736,10 +828,10 @@ Carry the layout and wording of `../Single-Sign-On-1/src/main/resources/template
 | `test_unknown_app_shows_the_console_not_found_page` | 404 |
 | `test_forms_need_a_csrf_token` | POST without it → 419 |
 
-- [ ] **Step 2: Run** both classes. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Admin console: overview and apps"`
+- [x] **Step 2: Run** both classes. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Admin console: overview and apps"`
 
 ### Task 14: Admin console: users
 
@@ -751,7 +843,7 @@ Carry the layout and wording of `../Single-Sign-On-1/src/main/resources/template
 - Consumes: `AccountService` (all methods).
 - Produces: routes `GET /admin/users` (query `q`, 25 per page), `GET /admin/users/new`, `POST /admin/users`, `GET /admin/users/{user}`, `POST /admin/users/{user}` (details), and POST `.../unlock`, `.../require-password-change`, `.../reset-password`, `.../disable`, `.../enable`, `.../roles`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -764,10 +856,10 @@ Carry the layout and wording of `../Single-Sign-On-1/src/main/resources/template
 | `test_admin_sees_protected_accounts_but_is_offered_no_actions` | page 200, no action forms; each POST → 403 |
 | `test_icto_admin_cannot_disable_themselves_or_drop_their_own_role` | error message shown; unchanged |
 
-- [ ] **Step 2: Run** `php artisan test --filter=ConsoleUsersTest`. Expected: FAIL.
-- [ ] **Step 3: Implement.** Controllers translate `AuthorizationException` to 403 and `ValidationException` to the form with errors.
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Admin console: users"`
+- [x] **Step 2: Run** `php artisan test --filter=ConsoleUsersTest`. Expected: FAIL.
+- [x] **Step 3: Implement.** Controllers translate `AuthorizationException` to 403 and `ValidationException` to the form with errors.
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Admin console: users"`
 
 ### Task 15: Admin API and the audit trail
 
@@ -794,7 +886,7 @@ Routes (prefix `/api/v1`, all `auth:api`):
 
 Request and response field names are camelCase as in the source (`redirectUris`, `postLogoutRedirectUris`, `backchannelLogoutUri`, `allowedRoles`, `studentNumber`, `employeeNumber`, `firstName`, `userTypeId`, …); controllers map them to the snake_case `$data` keys. `POST client` returns `clientId`, `clientSecret`, `clientName`. Standard roles cannot be renamed; renaming a custom role rewrites it in every client's `allowed_roles` in one transaction.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | `AdminApiTest` | Asserts |
 |------|---------|
@@ -815,10 +907,10 @@ Request and response field names are camelCase as in the source (`redirectUris`,
 | `test_secrets_never_reach_the_audit_trail` | after `POST client`: stored `response_body` contains `"clientSecret":"***"` and not the secret; a request body with `password` is masked |
 | `test_unauthenticated_calls_are_recorded_too` | row with null `user_id`, `status_code` 401 |
 
-- [ ] **Step 2: Run** both classes. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "Admin API and API audit trail"`
+- [x] **Step 2: Run** both classes. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "Admin API and API audit trail"`
 
 ### Task 16: API documentation with Scramble
 
@@ -847,9 +939,9 @@ Scramble::configure()->withDocumentTransformers(function (OpenApi $openApi) {
 
 `sso:install`, after the key step: if `config('sso.admin_client_secret')` is empty, print "Admin console client not created: SSO_ADMIN_CLIENT_SECRET is not set." Otherwise, unless a client with id `sso-admin-console` exists, register it with that secret, name `SSO Admin Console`, redirect address `{issuer}/docs/api`, scopes `openid profile email sso.admin`, `allowed_roles` `ICTO_ADMIN, ADMIN`. An existing client is left exactly as it is.
 
-- [ ] **Step 1: Install** `composer require dedoc/scramble` and `php artisan vendor:publish --provider="Dedoc\Scramble\ScrambleServiceProvider" --tag="scramble-config"`.
+- [x] **Step 1: Install** `composer require dedoc/scramble` and `php artisan vendor:publish --provider="Dedoc\Scramble\ScrambleServiceProvider" --tag="scramble-config"`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -862,11 +954,11 @@ Scramble::configure()->withDocumentTransformers(function (OpenApi $openApi) {
 | `test_install_skips_the_admin_client_when_no_secret_is_set` | no client; the message above is printed |
 | `test_a_token_from_the_admin_client_can_call_the_admin_api` | `tokensFor($ictoAdmin, $adminClient, 'openid sso.admin')` → `GET /api/v1/client/` is 200 |
 
-- [ ] **Step 3: Run** `php artisan test --filter=ApiDocsTest`. Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 6: Check in a browser** (this has not been tried in advance). Set `SSO_ADMIN_CLIENT_SECRET` to a 32-character random value, run `php artisan sso:install` and `php artisan serve`, sign in as an ICTO admin, open `/docs/api`, choose the OAuth2 authorization-code option, enter client id `sso-admin-console` and the secret, tick all scopes, authorize, then send `GET /v1/user/me`. Expected: 200 with your profile. If the viewer sends a redirect address other than `{issuer}/docs/api`, register the address it sends in `sso:install` and in the test. If the viewer cannot complete the code flow at all, set `renderer` back to `elements`, add a README line that a token must be pasted in, and say so in the commit message.
-- [ ] **Step 7: Commit** `git commit -am "API documentation with Scramble and the first admin client"`
+- [x] **Step 3: Run** `php artisan test --filter=ApiDocsTest`. Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 6: Check in a browser** (this has not been tried in advance). Set `SSO_ADMIN_CLIENT_SECRET` to a 32-character random value, run `php artisan sso:install` and `php artisan serve`, sign in as an ICTO admin, open `/docs/api`, choose the OAuth2 authorization-code option, enter client id `sso-admin-console` and the secret, tick all scopes, authorize, then send `GET /v1/user/me`. Expected: 200 with your profile. If the viewer sends a redirect address other than `{issuer}/docs/api`, register the address it sends in `sso:install` and in the test. If the viewer cannot complete the code flow at all, set `renderer` back to `elements`, add a README line that a token must be pasted in, and say so in the commit message.
+- [x] **Step 7: Commit** `git commit -am "API documentation with Scramble and the first admin client"`
 
 ---
 
@@ -889,7 +981,7 @@ Cleanup deletes: access tokens past `expires_at` whose refresh token is also pas
 
 Problems reported by `sso:check`: "SSO_ISSUER must be the public https:// address of this server (is {issuer})."; "SSO_ISSUER must be the public address of this server, not localhost." (also for `127.0.0.1`); "SESSION_SECURE_COOKIE must be true so the SSO session cookie is only sent over HTTPS."; "APP_DEBUG must be false in production."; "SSO_ADMIN_CLIENT_SECRET must be a random value of at least 24 characters (or unset)." (when it is set and is shorter than 24 characters or one of `change-me`, `changeme`, `secret`, `password`, ignoring case).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 | Test | Asserts |
 |------|---------|
@@ -904,21 +996,21 @@ Problems reported by `sso:check`: "SSO_ISSUER must be the public https:// addres
 | `test_activity_logs_are_never_removed` | — |
 | `SettingsCheckTest` | one test per problem, one for a clean production setup (`[]`), one that the command exits 0 outside production |
 
-- [ ] **Step 2: Run** the three classes. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** `php artisan test` and `php artisan schedule:list`. Expected: PASS; `sso:cleanup` listed at 02:30.
-- [ ] **Step 5: Commit** `git commit -am "Rate limits, nightly cleanup and production settings check"`
+- [x] **Step 2: Run** the three classes. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run** `php artisan test` and `php artisan schedule:list`. Expected: PASS; `sso:cleanup` listed at 02:30.
+- [x] **Step 5: Commit** `git commit -am "Rate limits, nightly cleanup and production settings check"`
 
 ### Task 18: Documentation and end-to-end check
 
 **Files:**
 - Create: `README.md` (replace the skeleton's), `starter-kits/README.md`
 
-- [ ] **Step 1: Write `README.md`** with these sections, following the source's README: what this is and its relation to the Spring Boot server; requirements (PHP 8.2, Composer, MariaDB or PostgreSQL); running locally (`composer install`, `.env`, `php artisan migrate --seed`, `php artisan sso:install`, `php artisan serve`, sign in as `admin` / `password123` and choose a new password, open `/admin`); connecting an app (people sign in with their student or employee number; the claims; the four roles; per-app rules); the admin API and its documentation at `/docs/api` (sign in there with `sso-admin-console` and `SSO_ADMIN_CLIENT_SECRET`); operations (`/actuator/health`, `sso:cleanup` and the scheduler's cron line, the two rate-limit settings); production (`sso:check`, `SESSION_SECURE_COOKIE`, `SSO_ISSUER`, key files or `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY`, `php artisan optimize`); differences from the Spring Boot server (the table in the spec).
-- [ ] **Step 2: Write `starter-kits/README.md`**: the kits live in `../Single-Sign-On-1/starter-kits` and work unchanged; set `SSO_ISSUER` to this server.
-- [ ] **Step 3: End-to-end run.** Start this server on port 8000. Register two apps in `/admin/apps` with redirect, post-logout and single-logout addresses for the Express kit (port 3000) and for the Laravel kit installed in a scratch Laravel app (port 8001). Expected, in order: sign in to the first with the password; open the second with no password; sign out of the second and the first is signed out too; a second browser profile signed in to the first stays signed in; an app limited to `EMPLOYEE` shows a student the no-access page. Record the result in the commit message; fix and re-run on any failure.
-- [ ] **Step 4: Run** `php artisan test`. Expected: PASS.
-- [ ] **Step 5: Commit** `git commit -am "README and end-to-end check with the starter kits"`
+- [x] **Step 1: Write `README.md`** with these sections, following the source's README: what this is and its relation to the Spring Boot server; requirements (PHP 8.2, Composer, MariaDB or PostgreSQL); running locally (`composer install`, `.env`, `php artisan migrate --seed`, `php artisan sso:install`, `php artisan serve`, sign in as `admin` / `password123` and choose a new password, open `/admin`); connecting an app (people sign in with their student or employee number; the claims; the four roles; per-app rules); the admin API and its documentation at `/docs/api` (sign in there with `sso-admin-console` and `SSO_ADMIN_CLIENT_SECRET`); operations (`/actuator/health`, `sso:cleanup` and the scheduler's cron line, the two rate-limit settings); production (`sso:check`, `SESSION_SECURE_COOKIE`, `SSO_ISSUER`, key files or `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY`, `php artisan optimize`); differences from the Spring Boot server (the table in the spec).
+- [x] **Step 2: Write `starter-kits/README.md`**: the kits live in `../Single-Sign-On-1/starter-kits` and work unchanged; set `SSO_ISSUER` to this server.
+- [x] **Step 3: End-to-end run.** Start this server on port 8000. Register two apps in `/admin/apps` with redirect, post-logout and single-logout addresses for the Express kit (port 3000) and for the Laravel kit installed in a scratch Laravel app (port 8001). Expected, in order: sign in to the first with the password; open the second with no password; sign out of the second and the first is signed out too; a second browser profile signed in to the first stays signed in; an app limited to `EMPLOYEE` shows a student the no-access page. Record the result in the commit message; fix and re-run on any failure.
+- [x] **Step 4: Run** `php artisan test`. Expected: PASS.
+- [x] **Step 5: Commit** `git commit -am "README and end-to-end check with the starter kits"`
 
 ---
 
