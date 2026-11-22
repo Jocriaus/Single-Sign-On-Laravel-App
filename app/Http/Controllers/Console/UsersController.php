@@ -25,14 +25,7 @@ class UsersController extends Controller
         $q = trim((string) $request->query('q', ''));
 
         $users = User::query()->with(['userType', 'roles'])
-            ->when($q !== '', function ($query) use ($q) {
-                $like = '%'.mb_strtolower($q).'%';
-                $query->where(function ($w) use ($like) {
-                    foreach (['username', 'email', 'first_name', 'last_name', 'student_no', 'employee_no'] as $column) {
-                        $w->orWhereRaw("LOWER({$column}) LIKE ?", [$like]);
-                    }
-                });
-            })
+            ->when($q !== '', fn ($query) => $query->search($q))
             ->orderBy('last_name')->orderBy('first_name')->orderBy('username')
             ->simplePaginate(25)->withQueryString();
 
@@ -137,7 +130,7 @@ class UsersController extends Controller
 
     private function find(string $id): User
     {
-        return (ctype_digit($id) ? User::find($id) : null) ?? abort(response()->view('admin.not-found', [
+        return (ctype_digit($id) && strlen($id) <= 18 ? User::find($id) : null) ?? abort(response()->view('admin.not-found', [
             'message' => "That user doesn't exist. They may have been removed.",
         ], 404));
     }

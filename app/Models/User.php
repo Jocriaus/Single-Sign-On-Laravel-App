@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -74,6 +75,17 @@ class User extends Authenticatable
         return static::query()
             ->whereRaw('LOWER(username) = ?', [mb_strtolower(trim($username))])
             ->first();
+    }
+
+    /** Case-insensitive match on the sign-in name, email, name and numbers. */
+    public function scopeSearch(Builder $query, string $term): void
+    {
+        $like = '%'.mb_strtolower($term).'%';
+        $query->where(function (Builder $where) use ($like) {
+            foreach (['username', 'email', 'first_name', 'last_name', 'student_no', 'employee_no'] as $column) {
+                $where->orWhereRaw("LOWER({$column}) LIKE ?", [$like]);
+            }
+        });
     }
 
     public function userType(): BelongsTo

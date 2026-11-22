@@ -4,6 +4,7 @@ namespace Tests\Feature\Console;
 
 use App\Models\User;
 use App\Sso\Accounts\AutomaticRoles;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Support\OAuthFlow;
 use Tests\TestCase;
@@ -231,5 +232,30 @@ class ConsoleUsersTest extends TestCase
         $this->post($url.'/roles', ['roles' => ['ADMIN']])->assertRedirect($url);
         $this->get($url)->assertSee("You can't remove your own ICTO admin role.");
         $this->assertTrue($me->fresh()->hasRole('ICTO_ADMIN'));
+    }
+
+    public function test_a_guest_is_sent_to_login_and_a_student_is_refused_on_the_user_screens(): void
+    {
+        $target = $this->student();
+
+        $this->get('/admin/users')->assertRedirect('/login');
+
+        $this->signInToSso($this->student());
+        $this->get('/admin/users')->assertForbidden();
+        $this->post('/admin/users/'.$target->id.'/reset-password', ['confirm' => '1'])->assertForbidden();
+    }
+
+    public function test_an_id_longer_than_eighteen_digits_is_the_not_found_page(): void
+    {
+        $this->signInToSso($this->icto());
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $this->get('/admin/users/'.str_repeat('9', 19))->assertNotFound()->assertSee('Back to the overview');
+        foreach (DB::getQueryLog() as $query) {
+            $this->assertNotContains(str_repeat('9', 19), array_map('strval', $query['bindings']), 'The long id reached the database.');
+        }
+        DB::flushQueryLog();
+        $this->post('/admin/users/'.str_repeat('1', 40).'/unlock')->assertNotFound();
     }
 }

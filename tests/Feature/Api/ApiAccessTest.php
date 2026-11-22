@@ -115,4 +115,20 @@ class ApiAccessTest extends TestCase
             ->assertJson(['errorCode' => 'VALIDATION_FAILED', 'status' => 422])
             ->assertJsonStructure(['data' => ['name']]);
     }
+
+    public function test_other_http_errors_keep_their_real_status(): void
+    {
+        Route::get('/api/v1/odd', fn () => abort(415));
+        Route::get('/api/v1/down', fn () => abort(503));
+
+        $this->getJson('/api/v1/odd')->assertStatus(415)
+            ->assertJson(['errorCode' => 'REQUEST_FAILED', 'message' => 'Unsupported Media Type', 'status' => 415]);
+        $this->getJson('/api/v1/down')->assertStatus(503)
+            ->assertJson(['errorCode' => 'INTERNAL_ERROR', 'message' => 'Something went wrong.', 'status' => 503]);
+    }
+
+    public function test_the_bare_api_address_is_the_json_404(): void
+    {
+        $this->get('/api')->assertStatus(404)->assertJson(['errorCode' => 'NOT_FOUND', 'success' => false]);
+    }
 }

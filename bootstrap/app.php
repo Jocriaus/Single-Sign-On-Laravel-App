@@ -1,16 +1,20 @@
 <?php
 
+use App\Http\Middleware\AuditApi;
 use App\Http\Middleware\EnsureAccountActive;
 use App\Http\Middleware\EnsureSessionOwner;
 use App\Http\Middleware\RequirePasswordChange;
 use App\Http\Middleware\RequireRole;
+use App\Http\Middleware\RequireSsoAdmin;
 use App\Sso\Api\ApiResponse;
+use App\Sso\Api\RequestFields;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -26,7 +30,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'account.active' => EnsureAccountActive::class,
             'session.owner' => EnsureSessionOwner::class,
             'role' => RequireRole::class,
+            'sso.admin' => RequireSsoAdmin::class,
+            'api.audit' => AuditApi::class,
         ]);
+        // Outermost on /api, so calls that fail authentication are recorded too.
+        $middleware->prependToGroup('api', AuditApi::class);
         // Whose session it is comes first, then what that account still has to do.
         $middleware->appendToGroup('web', [EnsureSessionOwner::class, RequirePasswordChange::class]);
         $middleware->validateCsrfTokens(except: ['oauth2/token', 'connect/logout']);
@@ -44,7 +52,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Everything under /api answers in the envelope and never leaks exception detail.
         $exceptions->render(function (Throwable $e, Request $request) {
-            if (! $request->is('api/*')) {
+            if (! $request->is('api', 'api/*')) {
                 return null;
             }
 
@@ -52,7 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 return ApiResponse::error('UNAUTHORIZED', 'Sign in with an access token from this SSO server.', 401);
             }
             if ($e instanceof ValidationException) {
-                return ApiResponse::error('VALIDATION_FAILED', 'The request is not valid.', 422, $e->errors());
+                return ApiResponse::error('VALIDATION_FAILED', 'The request is not valid.', 422, RequestFields::rekey($e->errors()));
             }
 
             $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
@@ -62,7 +70,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 404 => ApiResponse::error('NOT_FOUND', 'Not found.', 404),
                 405 => ApiResponse::error('METHOD_NOT_ALLOWED', 'This method is not allowed here.', 405),
                 429 => ApiResponse::error('TOO_MANY_REQUESTS', 'Too many requests. Try again later.', 429),
-                default => ApiResponse::error('INTERNAL_ERROR', 'Something went wrong.', 500),
+                default => $status >= 400 && $status < 500
+                    ? ApiResponse::error('REQUEST_FAILED', Response::$statusTexts[$status] ?? 'The request failed.', $status)
+                    : ApiResponse::error('INTERNAL_ERROR', 'Something went wrong.', $status >= 500 ? $status : 500),
             };
         });
     })->create();
