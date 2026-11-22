@@ -259,6 +259,26 @@ class BackChannelLogoutTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_a_redirect_from_an_apps_logout_address_is_not_followed(): void
+    {
+        // The fake answers without redirecting either way, so also check the option that stops a real client.
+        $followed = [];
+        Http::fake(function (HttpRequest $request, array $options) use (&$followed) {
+            $followed[] = $options['allow_redirects'] ?? true;
+
+            return Http::response('', 307, ['Location' => 'https://elsewhere.test/collect']);
+        });
+        $app = $this->appAt('library');
+        $this->signInToSso(User::factory()->create());
+        $this->signInToApp($app);
+
+        $this->post('/logout')->assertRedirect('/login?logout');
+
+        Http::assertSentCount(1);
+        Http::assertNotSent(fn (HttpRequest $request) => str_starts_with($request->url(), 'https://elsewhere.test'));
+        $this->assertSame([false], $followed);
+    }
+
     public function test_after_sign_out_the_next_authorize_asks_for_the_password_again(): void
     {
         Http::fake();

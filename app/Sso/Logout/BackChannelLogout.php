@@ -115,7 +115,7 @@ class BackChannelLogout
     private static function send(string $clientId, string $uri, string $token): void
     {
         try {
-            $status = Http::asForm()->connectTimeout(3)->timeout(5)->post($uri, ['logout_token' => $token])->status();
+            $status = Http::asForm()->withoutRedirecting()->connectTimeout(3)->timeout(5)->post($uri, ['logout_token' => $token])->status();
             if ($status === 200 || $status === 204) {
                 return;
             }
