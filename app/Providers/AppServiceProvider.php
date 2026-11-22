@@ -11,6 +11,10 @@ use App\Sso\OAuth\Scopes;
 use App\Sso\OAuth\SignInContext;
 use App\Sso\OAuth\SigningKey;
 use Carbon\CarbonInterval;
+use Dedoc\Scramble\Scramble;
+use Dedoc\Scramble\Support\Generator\OpenApi;
+use Dedoc\Scramble\Support\Generator\SecurityScheme;
+use Dedoc\Scramble\Support\Generator\SecuritySchemes\OAuthFlow;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Bridge;
 use Laravel\Passport\Passport;
@@ -47,5 +51,16 @@ class AppServiceProvider extends ServiceProvider
         ]);
         Passport::tokensExpireIn(CarbonInterval::minutes(config('sso.access_token_minutes')));
         Passport::refreshTokensExpireIn(CarbonInterval::hours(config('sso.refresh_token_hours')));
+
+        Scramble::configure()->withDocumentTransformers(function (OpenApi $openApi) {
+            $openApi->secure(SecurityScheme::oauth2()->flow('authorizationCode', function (OAuthFlow $flow) {
+                $issuer = config('sso.issuer');
+                $flow->authorizationUrl("$issuer/oauth2/authorize")->tokenUrl("$issuer/oauth2/token")
+                    ->refreshUrl("$issuer/oauth2/token");
+                foreach (Scopes::ALLOWED as $scope) {
+                    $flow->addScope($scope);
+                }
+            }));
+        });
     }
 }

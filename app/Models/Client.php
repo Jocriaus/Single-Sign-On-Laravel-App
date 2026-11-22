@@ -23,4 +23,10 @@ class Client extends PassportClient
     {
         return true;
     }
+
+    /** Passport only looks up UUID ids; the admin console client has a readable id. */
+    protected function isValidUniqueId($value): bool
+    {
+        return is_string($value) && $value !== '';
+    }
 }
