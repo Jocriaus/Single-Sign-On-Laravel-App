@@ -61,7 +61,7 @@ class ClientController extends Controller
 
     private function find(string $id): Client
     {
-        return Client::find($id) ?? abort(404);
+        return Client::findById($id) ?? abort(404);
     }
 
     /** @return array<string, mixed> */

@@ -145,4 +145,18 @@ class ConsoleAppsTest extends TestCase
         $this->post('/admin/apps', $this->form())->assertStatus(419);
         $this->assertSame(0, Client::count());
     }
+
+    public function test_a_malformed_app_id_shows_the_not_found_page_without_a_lookup(): void
+    {
+        $queries = 0;
+        \Illuminate\Support\Facades\DB::listen(function ($query) use (&$queries) {
+            if (str_contains($query->sql, 'oauth_clients')) {
+                $queries++;
+            }
+        });
+
+        $this->get('/admin/apps/'.str_repeat('a', 300))->assertStatus(404);
+
+        $this->assertSame(0, $queries);
+    }
 }

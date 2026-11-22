@@ -15,6 +15,9 @@ use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Dedoc\Scramble\Support\Generator\SecuritySchemes\OAuthFlow;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Bridge;
 use Laravel\Passport\Passport;
@@ -52,6 +55,9 @@ class AppServiceProvider extends ServiceProvider
         Passport::tokensExpireIn(CarbonInterval::minutes(config('sso.access_token_minutes')));
         Passport::refreshTokensExpireIn(CarbonInterval::hours(config('sso.refresh_token_hours')));
 
+        RateLimiter::for('sso-login', fn (Request $request) => $this->perAddress($request, 'login_per_minute'));
+        RateLimiter::for('sso-token', fn (Request $request) => $this->perAddress($request, 'token_per_minute'));
+
         Scramble::configure()->withDocumentTransformers(function (OpenApi $openApi) {
             $openApi->secure(SecurityScheme::oauth2()->flow('authorizationCode', function (OAuthFlow $flow) {
                 $issuer = config('sso.issuer');
@@ -62,5 +68,15 @@ class AppServiceProvider extends ServiceProvider
                 }
             }));
         });
+    }
+
+    private function perAddress(Request $request, string $setting): Limit
+    {
+        return Limit::perMinute((int) config("sso.rate_limit.$setting"))->by((string) $request->ip())
+            ->response(fn (Request $request, array $headers) => response(
+                'Too many attempts from your network. Wait a minute and try again.',
+                429,
+                $headers + ['Content-Type' => 'text/plain; charset=UTF-8'],
+            ));
     }
 }

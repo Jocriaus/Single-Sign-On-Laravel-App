@@ -287,4 +287,20 @@ class AdminApiTest extends TestCase
         $items = $this->withToken($token)->getJson('/api/v1/admin/logs')->assertOk()->json('data.items');
         $this->assertSame($actor->username, $items[0]['username']);
     }
+
+    public function test_a_malformed_client_id_is_not_looked_up(): void
+    {
+        $token = $this->tokenFor($this->icto());
+        $queries = 0;
+        \Illuminate\Support\Facades\DB::listen(function ($query) use (&$queries) {
+            if (str_contains($query->sql, 'oauth_clients')) {
+                $queries++;
+            }
+        });
+
+        $this->withToken($token)->getJson('/api/v1/client/%00abc')
+            ->assertStatus(404)->assertJson(['success' => false, 'errorCode' => 'NOT_FOUND']);
+
+        $this->assertSame(0, $queries);
+    }
 }

@@ -17,7 +17,7 @@ use Laravel\Passport\Http\Controllers\AccessTokenController;
 Route::get('/', HomeController::class)->middleware('auth')->name('home');
 
 Route::get('/login', [LoginController::class, 'show'])->name('login');
-Route::post('/login', [LoginController::class, 'attempt'])->name('login.attempt');
+Route::post('/login', [LoginController::class, 'attempt'])->middleware('throttle:sso-login')->name('login.attempt');
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 // Visited by the browser, sent by an app: needs the session; apps post to it cross-site, so no CSRF token.
 Route::match(['get', 'post'], '/connect/logout', EndSessionController::class);
@@ -75,7 +75,7 @@ Route::withoutMiddleware([
     Route::get('/.well-known/openid-configuration', [DiscoveryController::class, 'configuration']);
     Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);
     // Called by apps server to server.
-    Route::post('/oauth2/token', [AccessTokenController::class, 'issueToken']);
+    Route::post('/oauth2/token', [AccessTokenController::class, 'issueToken'])->middleware('throttle:sso-token');
     // Called by apps with a bearer token.
     Route::match(['get', 'post'], '/userinfo', UserInfoController::class)->middleware(['auth:api', 'account.active']);
 });

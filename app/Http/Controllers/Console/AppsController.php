@@ -61,7 +61,7 @@ class AppsController extends Controller
 
     private function find(string $id): Client
     {
-        return Client::find($id) ?? abort(response()->view('admin.not-found', [
+        return Client::findById($id) ?? abort(response()->view('admin.not-found', [
             'message' => "That app doesn't exist. It may have been removed.",
         ], 404));
     }
