@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureAccountActive;
 use App\Http\Middleware\EnsureSessionOwner;
 use App\Http\Middleware\RequirePasswordChange;
+use App\Http\Middleware\RequireRole;
 use App\Sso\Api\ApiResponse;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'password.changed' => RequirePasswordChange::class,
             'account.active' => EnsureAccountActive::class,
             'session.owner' => EnsureSessionOwner::class,
+            'role' => RequireRole::class,
         ]);
         // Whose session it is comes first, then what that account still has to do.
         $middleware->appendToGroup('web', [EnsureSessionOwner::class, RequirePasswordChange::class]);

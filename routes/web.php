@@ -3,6 +3,8 @@
 use App\Http\Controllers\Auth\HomeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordChangeController;
+use App\Http\Controllers\Console\AppsController;
+use App\Http\Controllers\Console\OverviewController;
 use App\Http\Controllers\OAuth\AuthorizeController;
 use App\Http\Controllers\OAuth\DiscoveryController;
 use App\Http\Controllers\OAuth\EndSessionController;
@@ -24,6 +26,20 @@ Route::middleware('auth')->group(function () {
     Route::post('/change-password', [PasswordChangeController::class, 'update'])->name('password.update');
     // RequirePasswordChange (web group) also guards this route.
     Route::get('/oauth2/authorize', AuthorizeController::class);
+});
+
+Route::prefix('admin')->middleware(['auth', 'role:ICTO_ADMIN,ADMIN'])->group(function () {
+    Route::get('/', OverviewController::class)->name('admin.overview');
+
+    Route::middleware('role:ICTO_ADMIN')->prefix('apps')->controller(AppsController::class)->group(function () {
+        Route::get('/', 'index')->name('admin.apps');
+        Route::get('/new', 'create')->name('admin.apps.new');
+        Route::post('/', 'store')->name('admin.apps.store');
+        Route::get('/{client}', 'show')->name('admin.apps.show');
+        Route::post('/{client}', 'update')->name('admin.apps.update');
+        Route::post('/{client}/secret', 'resetSecret')->name('admin.apps.secret');
+        Route::post('/{client}/delete', 'destroy')->name('admin.apps.delete');
+    });
 });
 
 Route::get('/actuator/health', function () {

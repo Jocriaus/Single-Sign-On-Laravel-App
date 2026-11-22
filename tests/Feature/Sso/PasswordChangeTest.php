@@ -31,6 +31,13 @@ class PasswordChangeTest extends TestCase
         $this->signInToSso($this->flagged())->get('/')->assertRedirect('/change-password');
     }
 
+    public function test_an_admin_who_must_change_password_is_kept_out_of_the_console(): void
+    {
+        $admin = User::factory()->employee()->withRole('ICTO_ADMIN')->mustChangePassword()->create();
+
+        $this->signInToSso($admin)->get('/admin')->assertRedirect('/change-password');
+    }
+
     public function test_allowed_pages_stay_reachable(): void
     {
         $this->signInToSso($this->flagged());

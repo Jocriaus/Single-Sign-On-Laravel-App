@@ -142,6 +142,6 @@ class AppAccessTest extends TestCase
         $this->registerApp(['allowed_roles' => 'STUDENT, EMPLOYEE']);
         $admin = User::factory()->adminType()->withRole('ICTO_ADMIN')->create();
 
-        $this->signInToSso($admin)->get('/')->assertOk();
+        $this->signInToSso($admin)->get('/admin')->assertOk();
     }
 }
