@@ -38,6 +38,12 @@ class AccessTokenRepository extends PassportAccessTokenRepository
         }
     }
 
+    /** An ID token carries no jti and has no row here: it is not an access token, so it counts as revoked. */
+    public function isAccessTokenRevoked(?string $tokenId): bool
+    {
+        return $tokenId === null || parent::isAccessTokenRevoked($tokenId);
+    }
+
     public function persistNewAccessToken(AccessTokenEntityInterface $accessTokenEntity): void
     {
         $request = request();

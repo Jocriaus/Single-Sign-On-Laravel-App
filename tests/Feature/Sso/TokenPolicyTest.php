@@ -129,6 +129,39 @@ class TokenPolicyTest extends TestCase
         $this->assertSame(1, DB::table('oauth_access_tokens')->count());
     }
 
+    public function test_disabled_user_cannot_exchange_a_code(): void
+    {
+        $user = User::factory()->create();
+        $app = $this->registerApp();
+        $this->signInToSso($user);
+        $verifier = Str::random(64);
+        $code = $this->codeFrom($this->authorize($app['client'], ['code_challenge' => $this->challenge($verifier)]));
+        $user->update(['status_flag' => false]);
+
+        $this->assertRefused($this->exchange($app['client'], $app['secret'], $code, $verifier));
+        $this->assertSame(0, DB::table('oauth_access_tokens')->count());
+    }
+
+    public function test_grants_other_than_code_and_refresh_are_refused(): void
+    {
+        $app = $this->registerApp();
+
+        foreach (['client_credentials', 'password'] as $grant) {
+            $response = $this->post('/oauth2/token', [
+                'grant_type' => $grant,
+                'client_id' => $app['client']->id,
+                'client_secret' => $app['secret'],
+                'username' => 'someone',
+                'password' => 'correct-horse-battery',
+            ]);
+
+            $this->assertContains($response->getStatusCode(), [400, 401], $grant);
+            $this->assertArrayHasKey('error', $response->json());
+            $this->assertArrayNotHasKey('access_token', $response->json());
+        }
+        $this->assertSame(0, DB::table('oauth_access_tokens')->count());
+    }
+
     public function test_refresh_token_expires_after_eight_hours(): void
     {
         $now = now()->startOfSecond();

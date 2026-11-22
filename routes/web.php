@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\OAuth\AuthorizeController;
 use App\Http\Controllers\OAuth\DiscoveryController;
+use App\Http\Controllers\OAuth\UserInfoController;
 use App\Sso\HealthProbe;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Controllers\AccessTokenController;
@@ -40,4 +41,6 @@ Route::withoutMiddleware([
     Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);
     // Called by apps server to server.
     Route::post('/oauth2/token', [AccessTokenController::class, 'issueToken']);
+    // Called by apps with a bearer token.
+    Route::match(['get', 'post'], '/userinfo', UserInfoController::class)->middleware(['auth:api', 'account.active']);
 });

@@ -43,6 +43,32 @@ class UserClaims
         return $profile;
     }
 
+    /**
+     * Claims for the userinfo endpoint.
+     *
+     * @param  list<string>  $scopes
+     */
+    public static function forUserInfo(User $user, array $scopes): array
+    {
+        $claims = [
+            'sub' => (string) $user->getKey(),
+            'user_id' => (int) $user->getKey(),
+            'user_type' => self::userType($user),
+            'roles' => self::roles($user),
+        ];
+
+        if (in_array('profile', $scopes, true)) {
+            $claims['preferred_username'] = $user->username;
+            $claims['name'] = self::displayName($user);
+            $claims['user_profile'] = self::profile($user);
+        }
+        if (in_array('email', $scopes, true)) {
+            $claims['email'] = $user->email;
+        }
+
+        return $claims;
+    }
+
     /** Why the user may not be given tokens, or null when they may. */
     public static function inactiveReason(User $user): ?string
     {
