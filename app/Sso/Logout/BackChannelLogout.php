@@ -51,12 +51,7 @@ class BackChannelLogout
 
         $ids = $signIns->modelKeys();
         DB::transaction(function () use ($ids) {
-            // Revoked, not deleted: a refresh resolves its sign-in through the old access token's row.
-            $tokens = Passport::token()->newQuery()->whereIn('sign_in_id', $ids);
-            Passport::refreshToken()->newQuery()
-                ->whereIn('access_token_id', (clone $tokens)->select('id'))
-                ->update(['revoked' => true]);
-            $tokens->update(['revoked' => true]);
+            $this->revokeTokens($ids);
             Passport::authCode()->newQuery()->whereIn('sign_in_id', $ids)->update(['revoked' => true]);
             SignIn::whereKey($ids)->delete();
         });
@@ -68,6 +63,23 @@ class BackChannelLogout
                 }
             })->afterResponse();
         }
+    }
+
+    /**
+     * The access and refresh tokens of these sign-ins stop working. Revoked, not deleted: a refresh resolves
+     * its sign-in through the old access token's row.
+     *
+     * @param  list<string>  $signInIds
+     */
+    public function revokeTokens(array $signInIds): void
+    {
+        DB::transaction(function () use ($signInIds) {
+            $tokens = Passport::token()->newQuery()->whereIn('sign_in_id', $signInIds);
+            Passport::refreshToken()->newQuery()
+                ->whereIn('access_token_id', (clone $tokens)->select('id'))
+                ->update(['revoked' => true]);
+            $tokens->update(['revoked' => true]);
+        });
     }
 
     /**

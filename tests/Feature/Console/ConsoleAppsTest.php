@@ -84,6 +84,18 @@ class ConsoleAppsTest extends TestCase
         $this->assertSame(1, Client::count());
     }
 
+    public function test_pkce_can_be_switched_off_and_on_again(): void
+    {
+        $this->post('/admin/apps', $this->form(['require_pkce' => null]))->assertOk();
+        $client = Client::firstOrFail();
+        $this->assertFalse($client->require_pkce);
+        $this->assertDoesNotMatchRegularExpression('/name="require_pkce"[^>]*checked/', $this->get('/admin/apps/'.$client->id)->getContent());
+
+        $this->post('/admin/apps/'.$client->id, $this->form())->assertRedirect('/admin/apps/'.$client->id);
+        $this->assertTrue($client->fresh()->require_pkce);
+        $this->assertMatchesRegularExpression('/name="require_pkce"[^>]*checked/', $this->get('/admin/apps/'.$client->id)->getContent());
+    }
+
     public function test_access_rule_is_saved_and_summarised(): void
     {
         foreach (['STUDENT', 'EMPLOYEE'] as $name) {

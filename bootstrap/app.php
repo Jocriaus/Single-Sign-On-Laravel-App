@@ -37,7 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(AuditApi::class);
         // Whose session it is comes first, then what that account still has to do.
         $middleware->appendToGroup('web', [EnsureSessionOwner::class, RequirePasswordChange::class]);
-        $middleware->validateCsrfTokens(except: ['oauth2/token', 'connect/logout']);
+        $middleware->validateCsrfTokens(except: ['oauth2/token', 'oauth2/authorize', 'connect/logout']);
         $middleware->trimStrings(except: ['current_password', 'password', 'password_confirmation', 'new_password', 'new_password_confirmation']);
         $middleware->redirectGuestsTo(fn () => route('login'));
     })

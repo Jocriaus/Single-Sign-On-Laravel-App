@@ -23,7 +23,8 @@ class LoginController extends Controller
 
     public function show(Request $request)
     {
-        if (Auth::check()) {
+        // Signed in already: the form is only for an app request waiting for the password again (sso.reauth).
+        if (Auth::check() && $request->session()->get('sso.reauth.signed_in') !== false) {
             return redirect('/');
         }
 
@@ -34,7 +35,7 @@ class LoginController extends Controller
         ]);
     }
 
-    public function attempt(Request $request): RedirectResponse
+    public function attempt(Request $request, BackChannelLogout $logout): RedirectResponse
     {
         $data = $request->validate([
             'username' => ['required', 'string'],
@@ -64,14 +65,7 @@ class LoginController extends Controller
         }
 
         Lockout::clear($user);
-        Auth::login($user);
-        $request->session()->regenerate();
-        $request->session()->put([
-            'sso.sid' => rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '='),
-            'sso.user_id' => $user->getKey(),
-            'sso.username' => $user->username,
-            'sso.auth_time' => time(),
-        ]);
+        $this->signIn($request, $user, $logout);
         Activity::log($user, 'Signed in', Activity::AUTH);
 
         return LocalRedirect::intended();
@@ -79,6 +73,45 @@ class LoginController extends Controller
 
     /** Signs out of the SSO and of every app signed in from this browser session. */
     public function logout(Request $request, BackChannelLogout $logout): RedirectResponse
+    {
+        $this->endSession($request, $logout);
+
+        return redirect('/login?logout');
+    }
+
+    /**
+     * The account signed in again in the same browser session (an app asked for the password again) keeps
+     * the session's sid, so its app sign-ins stay signed in, and gets a new auth_time. Another account first
+     * signs the current one out of the SSO and its apps, then starts a session of its own.
+     */
+    private function signIn(Request $request, User $user, BackChannelLogout $logout): void
+    {
+        $session = $request->session();
+        $current = $request->user();
+        $sid = $session->get('sso.sid');
+        $sameAccount = $current !== null && (string) $current->getKey() === (string) $user->getKey() && is_string($sid);
+
+        if ($current !== null && ! $sameAccount) {
+            $carried = array_filter(['url.intended' => $session->get('url.intended'), 'sso.reauth' => $session->get('sso.reauth')]);
+            $this->endSession($request, $logout);
+            $session->put($carried);
+        }
+
+        Auth::login($user);
+        $session->regenerate();
+        $session->put([
+            'sso.sid' => $sameAccount ? $sid : rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '='),
+            'sso.user_id' => $user->getKey(),
+            'sso.username' => $user->username,
+            'sso.auth_time' => now()->getTimestamp(),
+        ]);
+        // The authorize request waiting for this password may go through now (AuthorizeController).
+        if (is_array($session->get('sso.reauth'))) {
+            $session->put('sso.reauth.signed_in', true);
+        }
+    }
+
+    private function endSession(Request $request, BackChannelLogout $logout): void
     {
         $user = $request->user();
         $sid = $request->session()->get('sso.sid');
@@ -89,8 +122,6 @@ class LoginController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-
-        return redirect('/login?logout');
     }
 
     private function back(string $error, string $username): RedirectResponse

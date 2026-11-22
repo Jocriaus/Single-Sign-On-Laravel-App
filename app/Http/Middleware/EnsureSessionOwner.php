@@ -23,7 +23,7 @@ class EnsureSessionOwner
     {
         $user = Auth::user();
 
-        if ($user === null || $request->is(...self::EXEMPT) || $this->isOwner($request, $user)) {
+        if ($user === null || $request->is(...self::EXEMPT) || self::isOwner($request, $user)) {
             return $next($request);
         }
 
@@ -34,7 +34,8 @@ class EnsureSessionOwner
         return redirect()->guest(route('login'));
     }
 
-    private function isOwner(Request $request, Authenticatable $user): bool
+    /** Also used by AuthorizeController, which is exempt from this middleware (it must answer the app itself). */
+    public static function isOwner(Request $request, Authenticatable $user): bool
     {
         $session = $request->session();
         $username = $session->get('sso.username');

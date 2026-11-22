@@ -139,6 +139,21 @@ class AdminApiTest extends TestCase
         $this->assertNull(Client::find($data['clientId']));
     }
 
+    public function test_an_app_is_registered_with_pkce_unless_it_is_switched_off(): void
+    {
+        $token = $this->tokenFor($this->icto());
+        $register = fn (array $extra) => $this->withToken($token)->postJson('/api/v1/client', $extra + [
+            'name' => 'Library', 'redirectUris' => ['https://lib.test/cb'],
+        ])->assertOk()->json('data.clientId');
+
+        $default = $register([]);
+        $off = $register(['requirePkce' => false]);
+
+        $this->withToken($token)->getJson('/api/v1/client/'.$default)->assertOk()->assertJsonPath('data.requirePkce', true);
+        $this->withToken($token)->getJson('/api/v1/client/'.$off)->assertOk()->assertJsonPath('data.requirePkce', false);
+        $this->assertFalse(Client::find($off)->require_pkce);
+    }
+
     public function test_creating_a_user_validates_and_returns_the_user(): void
     {
         $token = $this->tokenFor($this->icto());

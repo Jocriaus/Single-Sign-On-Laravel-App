@@ -10,6 +10,8 @@ use App\Http\Controllers\OAuth\AuthorizeController;
 use App\Http\Controllers\OAuth\DiscoveryController;
 use App\Http\Controllers\OAuth\EndSessionController;
 use App\Http\Controllers\OAuth\UserInfoController;
+use App\Http\Middleware\EnsureSessionOwner;
+use App\Http\Middleware\RequirePasswordChange;
 use App\Sso\HealthProbe;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Controllers\AccessTokenController;
@@ -25,9 +27,13 @@ Route::match(['get', 'post'], '/connect/logout', EndSessionController::class);
 Route::middleware('auth')->group(function () {
     Route::get('/change-password', [PasswordChangeController::class, 'show'])->name('password.change');
     Route::post('/change-password', [PasswordChangeController::class, 'update'])->name('password.update');
-    // RequirePasswordChange (web group) also guards this route.
-    Route::get('/oauth2/authorize', AuthorizeController::class);
 });
+
+// Not behind `auth` or the session checks: a silent sign-in (prompt=none) must get its error at the app, not a
+// page here, so the controller decides what a guest, a session to end or a password to change gets. Apps may
+// post the request (OpenID Connect Core 3.1.2.1) without a CSRF token.
+Route::match(['get', 'post'], '/oauth2/authorize', AuthorizeController::class)
+    ->withoutMiddleware([EnsureSessionOwner::class, RequirePasswordChange::class]);
 
 Route::prefix('admin')->middleware(['auth', 'role:ICTO_ADMIN,ADMIN'])->group(function () {
     Route::get('/', OverviewController::class)->name('admin.overview');
@@ -69,8 +75,8 @@ Route::withoutMiddleware([
     \Illuminate\Session\Middleware\StartSession::class,
     \Illuminate\View\Middleware\ShareErrorsFromSession::class,
     \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-    \App\Http\Middleware\RequirePasswordChange::class,
-    \App\Http\Middleware\EnsureSessionOwner::class,
+    RequirePasswordChange::class,
+    EnsureSessionOwner::class,
 ])->group(function () {
     Route::get('/.well-known/openid-configuration', [DiscoveryController::class, 'configuration']);
     Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);
