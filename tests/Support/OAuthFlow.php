@@ -79,6 +79,16 @@ trait OAuthFlow
         return $this->exchange($app['client'], $app['secret'], $code, $verifier)->assertOk()->json() + $app;
     }
 
+    protected function refresh(array $app, string $refreshToken): TestResponse
+    {
+        return $this->post('/oauth2/token', [
+            'grant_type' => 'refresh_token',
+            'refresh_token' => $refreshToken,
+            'client_id' => $app['client']->id,
+            'client_secret' => $app['secret'],
+        ]);
+    }
+
     /** Query parameters of the redirect back to the app. */
     protected function redirectQuery(TestResponse $response): array
     {

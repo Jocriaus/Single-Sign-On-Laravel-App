@@ -34,16 +34,6 @@ class SsoLoginFlowTest extends TestCase
         return [$app, $code, $verifier];
     }
 
-    private function refresh(array $app, string $refreshToken)
-    {
-        return $this->post('/oauth2/token', [
-            'grant_type' => 'refresh_token',
-            'refresh_token' => $refreshToken,
-            'client_id' => $app['client']->id,
-            'client_secret' => $app['secret'],
-        ]);
-    }
-
     public function test_full_flow_browser_to_tokens(): void
     {
         $this->seed();
@@ -341,7 +331,7 @@ class SsoLoginFlowTest extends TestCase
         [$app, $code, $verifier] = $this->codeForNewApp();
         Exceptions::fake();
         DB::listen(function ($query) {
-            if (str_contains($query->sql, 'from "oauth_auth_codes"') && str_contains($query->sql, 'sign_in_id')) {
+            if (str_contains($query->sql, 'oauth_auth_codes') && str_contains($query->sql, 'sign_in_id')) {
                 throw new RuntimeException('sign-in lookup failed');
             }
         });

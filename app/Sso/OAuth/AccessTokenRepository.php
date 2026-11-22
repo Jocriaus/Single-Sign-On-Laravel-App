@@ -2,6 +2,9 @@
 
 namespace App\Sso\OAuth;
 
+use App\Models\SignIn;
+use App\Models\User;
+use App\Sso\Accounts\UserClaims;
 use DateTimeImmutable;
 use Illuminate\Contracts\Events\Dispatcher;
 use Laravel\Passport\Bridge\AccessTokenRepository as PassportAccessTokenRepository;
@@ -20,6 +23,21 @@ class AccessTokenRepository extends PassportAccessTokenRepository
         parent::__construct($events);
     }
 
+    /** Account state and the absolute sign-in lifetime are checked at every issue. */
+    private function assertMayIssue(SignIn $signIn, bool $refresh): void
+    {
+        $user = User::find($signIn->user_id);
+        if ($user === null) {
+            throw OAuthServerException::invalidGrant('This account no longer exists.');
+        }
+        if (($reason = UserClaims::inactiveReason($user)) !== null) {
+            throw OAuthServerException::invalidGrant($reason);
+        }
+        if ($refresh && $signIn->started_at->addHours((int) config('sso.max_app_session_hours'))->isPast()) {
+            throw OAuthServerException::invalidGrant('The sign-in has expired. Sign in again.');
+        }
+    }
+
     public function persistNewAccessToken(AccessTokenEntityInterface $accessTokenEntity): void
     {
         $request = request();
@@ -34,6 +52,9 @@ class AccessTokenRepository extends PassportAccessTokenRepository
             || (string) $resolved['signIn']->user_id !== (string) $accessTokenEntity->getUserIdentifier()
         )) {
             throw OAuthServerException::invalidGrant('The sign-in behind this grant belongs to another app or user.');
+        }
+        if ($resolved !== null) {
+            $this->assertMayIssue($resolved['signIn'], $resolved['refresh']);
         }
         $this->context->set($resolved['signIn'] ?? null, $resolved['refresh'] ?? false);
 
