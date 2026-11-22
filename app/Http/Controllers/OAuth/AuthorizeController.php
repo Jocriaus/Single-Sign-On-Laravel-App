@@ -5,6 +5,9 @@ namespace App\Http\Controllers\OAuth;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\SignIn;
+use App\Sso\Accounts\UserClaims;
+use App\Sso\Activity;
+use App\Sso\Apps\AppAccess;
 use App\Sso\OAuth\SignInContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -45,6 +48,16 @@ class AuthorizeController extends Controller
         try {
             $authRequest = $this->server->validateAuthorizationRequest($psrRequest);
             $this->requireOpenIdAndPkce($authRequest);
+
+            $client = Client::find($authRequest->getClient()->getIdentifier());
+            if ($client !== null && ! AppAccess::allows($client, $request->user())) {
+                Activity::log($request->user(), "Refused sign-in to app {$client->name}: no allowed role", Activity::AUTH, 'OAuth2');
+
+                return response()->view('no-access', [
+                    'appName' => $client->name,
+                    'displayName' => UserClaims::displayName($request->user()),
+                ], 403)->header('Cache-Control', 'no-store');
+            }
 
             $this->context->set(SignIn::create([
                 'user_id' => $request->user()->getKey(),

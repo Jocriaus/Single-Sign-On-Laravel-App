@@ -2,9 +2,11 @@
 
 namespace App\Sso\OAuth;
 
+use App\Models\Client;
 use App\Models\SignIn;
 use App\Models\User;
 use App\Sso\Accounts\UserClaims;
+use App\Sso\Apps\AppAccess;
 use DateTimeImmutable;
 use Illuminate\Contracts\Events\Dispatcher;
 use Laravel\Passport\Bridge\AccessTokenRepository as PassportAccessTokenRepository;
@@ -32,6 +34,10 @@ class AccessTokenRepository extends PassportAccessTokenRepository
         }
         if (($reason = UserClaims::inactiveReason($user)) !== null) {
             throw OAuthServerException::invalidGrant($reason);
+        }
+        $client = Client::find($signIn->client_id);
+        if ($client === null || ! AppAccess::allows($client, $user)) {
+            throw OAuthServerException::invalidGrant('This account does not have access to this app.');
         }
         if ($refresh && $signIn->started_at->addHours((int) config('sso.max_app_session_hours'))->isPast()) {
             throw OAuthServerException::invalidGrant('The sign-in has expired. Sign in again.');
