@@ -158,4 +158,43 @@ class CleanupTest extends TestCase
         $this->assertNotNull($event);
         $this->assertSame('30 2 * * *', $event->expression);
     }
+
+    public function test_a_signed_out_sign_ins_rows_stay_until_the_refresh_token_expires(): void
+    {
+        $this->tokensFor(User::factory()->student()->create());
+        // What signing out leaves behind: the sign-in deleted, codes and tokens revoked.
+        SignIn::query()->delete();
+        DB::table('oauth_auth_codes')->update(['revoked' => true]);
+        DB::table('oauth_access_tokens')->update(['revoked' => true]);
+        DB::table('oauth_refresh_tokens')->update(['revoked' => true]);
+
+        $this->travel(20)->minutes();
+        $this->cleanup();
+        $this->assertSame(1, DB::table('oauth_refresh_tokens')->count());
+        $this->assertSame(1, DB::table('oauth_access_tokens')->count());
+
+        $this->travel(9)->hours();
+        $this->cleanup();
+        $this->assertSame(0, DB::table('oauth_refresh_tokens')->count());
+        $this->assertSame(0, DB::table('oauth_access_tokens')->count());
+        $this->assertSame(0, DB::table('oauth_auth_codes')->count());
+    }
+
+    public function test_more_than_a_thousand_old_audit_rows_are_all_removed(): void
+    {
+        $row = [
+            'endpoint' => '/api/v1/x', 'http_method' => 'GET', 'status_code' => 200, 'status' => 'SUCCESS',
+            'created_at' => now()->subDays(400),
+        ];
+        foreach (array_chunk(array_fill(0, 2300, $row), 500) as $chunk) {
+            DB::table('api_audit_logs')->insert($chunk);
+        }
+        $this->audit(1);
+
+        $this->artisan('sso:cleanup')
+            ->expectsOutput('Nightly cleanup removed 0 expired app sign-ins and 2300 old API audit rows')
+            ->assertExitCode(0);
+
+        $this->assertSame(1, DB::table('api_audit_logs')->count());
+    }
 }

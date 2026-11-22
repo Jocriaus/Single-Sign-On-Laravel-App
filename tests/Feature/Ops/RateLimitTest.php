@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Ops;
 
+use App\Sso\TrustedProxies;
+use Illuminate\Http\Middleware\TrustProxies;
 use Tests\TestCase;
 
 class RateLimitTest extends TestCase
@@ -67,5 +69,46 @@ class RateLimitTest extends TestCase
         for ($i = 0; $i < 40; $i++) {
             $this->get('/login')->assertOk();
         }
+    }
+
+    protected function tearDown(): void
+    {
+        TrustProxies::flushState();
+        parent::tearDown();
+    }
+
+    private function forwarded(string $address)
+    {
+        return $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1', 'HTTP_X_FORWARDED_FOR' => $address])
+            ->post('/login', ['username' => 'nobody', 'password' => 'wrong-password-1']);
+    }
+
+    public function test_behind_a_trusted_proxy_the_limit_is_per_forwarded_address(): void
+    {
+        TrustProxies::at(TrustedProxies::parse('127.0.0.1'));
+
+        for ($i = 0; $i < 30; $i++) {
+            $this->assertNotSame(429, $this->forwarded('198.51.100.7')->getStatusCode());
+        }
+        $this->forwarded('198.51.100.7')->assertStatus(429);
+
+        $this->assertNotSame(429, $this->forwarded('198.51.100.8')->getStatusCode());
+    }
+
+    public function test_without_a_trusted_proxy_the_forwarded_header_cannot_dodge_the_limit(): void
+    {
+        for ($i = 0; $i < 30; $i++) {
+            $this->assertNotSame(429, $this->forwarded('198.51.100.'.$i)->getStatusCode());
+        }
+
+        $this->forwarded('198.51.100.200')->assertStatus(429);
+    }
+
+    public function test_the_trusted_proxy_setting_is_parsed(): void
+    {
+        $this->assertNull(TrustedProxies::parse(''));
+        $this->assertNull(TrustedProxies::parse(' , '));
+        $this->assertSame(['10.0.0.1', '192.168.0.0/16'], TrustedProxies::parse('10.0.0.1, 192.168.0.0/16'));
+        $this->assertSame('*', TrustedProxies::parse('*'));
     }
 }

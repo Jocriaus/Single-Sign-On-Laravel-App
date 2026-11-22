@@ -79,4 +79,21 @@ class SettingsCheckTest extends TestCase
 
         $this->artisan('sso:check')->expectsOutput('Production settings look safe.')->assertExitCode(0);
     }
+
+    public function test_production_notes_a_missing_proxy_setting_without_failing(): void
+    {
+        $this->app['env'] = 'production';
+        config(['sso.issuer' => 'https://sso.bulsu.edu.ph', 'app.debug' => false, 'session.secure' => true, 'sso.trusted_proxies' => '']);
+        $note = 'Note: SSO_TRUSTED_PROXIES is not set. If this server is behind a reverse proxy, set it, or every visitor will share one rate limit.';
+
+        $this->artisan('sso:check')->expectsOutput($note)->expectsOutput('Production settings look safe.')->assertExitCode(0);
+    }
+
+    public function test_no_note_when_proxies_are_trusted(): void
+    {
+        $this->app['env'] = 'production';
+        config(['sso.issuer' => 'https://sso.bulsu.edu.ph', 'app.debug' => false, 'session.secure' => true, 'sso.trusted_proxies' => '10.0.0.1']);
+
+        $this->artisan('sso:check')->doesntExpectOutputToContain('SSO_TRUSTED_PROXIES')->assertExitCode(0);
+    }
 }

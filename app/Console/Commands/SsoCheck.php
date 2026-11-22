@@ -25,6 +25,10 @@ class SsoCheck extends Command
             (string) config('sso.admin_client_secret'),
         );
 
+        if (trim((string) config('sso.trusted_proxies')) === '') {
+            $this->line('Note: SSO_TRUSTED_PROXIES is not set. If this server is behind a reverse proxy, set it, or every visitor will share one rate limit.');
+        }
+
         if ($problems === []) {
             $this->info('Production settings look safe.');
 

@@ -9,6 +9,7 @@ use App\Sso\OAuth\AuthCodeRepository;
 use App\Sso\OAuth\IdTokenResponse;
 use App\Sso\OAuth\Scopes;
 use App\Sso\OAuth\SignInContext;
+use App\Sso\TrustedProxies;
 use App\Sso\OAuth\SigningKey;
 use Carbon\CarbonInterval;
 use Dedoc\Scramble\Scramble;
@@ -16,6 +17,7 @@ use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Dedoc\Scramble\Support\Generator\SecuritySchemes\OAuthFlow;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -54,6 +56,11 @@ class AppServiceProvider extends ServiceProvider
         ]);
         Passport::tokensExpireIn(CarbonInterval::minutes(config('sso.access_token_minutes')));
         Passport::refreshTokensExpireIn(CarbonInterval::hours(config('sso.refresh_token_hours')));
+
+        // Here rather than in bootstrap/app.php: config is loaded by now, so this also works after config:cache.
+        if (($proxies = TrustedProxies::parse((string) config('sso.trusted_proxies'))) !== null) {
+            TrustProxies::at($proxies);
+        }
 
         RateLimiter::for('sso-login', fn (Request $request) => $this->perAddress($request, 'login_per_minute'));
         RateLimiter::for('sso-token', fn (Request $request) => $this->perAddress($request, 'token_per_minute'));

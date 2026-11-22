@@ -15,6 +15,8 @@ return [
         'login_per_minute' => (int) env('SSO_RATE_LIMIT_LOGIN', 30),
         'token_per_minute' => (int) env('SSO_RATE_LIMIT_TOKEN', 600),
     ],
+    // Reverse proxies or load balancers in front of this server: comma-separated addresses or CIDR ranges, or *.
+    'trusted_proxies' => env('SSO_TRUSTED_PROXIES', ''),
     'admin_client_secret' => env('SSO_ADMIN_CLIENT_SECRET', ''),
     'api_audit_retention_days' => (int) env('SSO_API_AUDIT_RETENTION_DAYS', 365),
 ];
