@@ -26,12 +26,12 @@ class AccountService
     /** @return array{user: User, temporaryPassword: string} */
     public function create(User $actor, array $data): array
     {
-        if (! $actor->hasRole('ICTO_ADMIN', 'ADMIN')) {
+        if (! $this->isActive($actor) || ! $actor->hasRole('ICTO_ADMIN', 'ADMIN')) {
             throw new AuthorizationException('Only administrators can add accounts.');
         }
 
         return DB::transaction(function () use ($actor, $data) {
-            $fields = $this->validated($data, null);
+            $fields = $this->validated($data, null, $actor);
             $temporaryPassword = TemporaryPassword::generate();
 
             $user = new User($fields);
@@ -52,14 +52,15 @@ class AccountService
         $this->authorize($actor, $user);
 
         return DB::transaction(function () use ($actor, $user, $data) {
-            $fields = $this->validated($data, $user);
-
-            if (mb_strtolower($fields['username']) !== mb_strtolower((string) $user->username)) {
-                $this->logout->signOutEverywhere($user);
-            }
+            $fields = $this->validated($data, $user, $actor);
+            $renamed = mb_strtolower($fields['username']) !== mb_strtolower((string) $user->username);
 
             $user->fill($fields)->save();
             $this->automaticRoles->sync($user);
+            // Only after the save succeeded: the notices go out after the response, whatever the transaction does.
+            if ($renamed) {
+                $this->logout->signOutEverywhere($user);
+            }
 
             Activity::log($actor, "Updated account {$user->username}", Activity::UPDATE, 'Users');
 
@@ -113,6 +114,7 @@ class AccountService
         DB::transaction(function () use ($actor, $user, $enabled) {
             $user->update(['status_flag' => $enabled]);
             if (! $enabled) {
+                $this->assertActiveIctoAdminRemains('status');
                 $this->logout->signOutEverywhere($user);
             }
             Activity::log($actor, ($enabled ? 'Enabled' : 'Disabled')." account {$user->username}", Activity::UPDATE, 'Users');
@@ -122,8 +124,11 @@ class AccountService
     /** @param  list<string>  $roleNames  assigned roles only; STUDENT and EMPLOYEE follow the numbers */
     public function setRoles(User $actor, User $user, array $roleNames): void
     {
-        if (! $actor->hasRole('ICTO_ADMIN')) {
+        if (! $this->isActive($actor) || ! $actor->hasRole('ICTO_ADMIN')) {
             throw new AuthorizationException('Only ICTO admins can change roles.');
+        }
+        if (collect($roleNames)->contains(fn ($name) => ! is_string($name))) {
+            throw ValidationException::withMessages(['roles' => 'Roles must be given as names.']);
         }
 
         $names = collect($roleNames)->map(fn ($name) => strtoupper(trim((string) $name)))
@@ -144,6 +149,7 @@ class AccountService
             $keep = $user->roles()->whereIn('roles.id', $automatic)->pluck('roles.id');
             $user->roles()->sync($roles->pluck('id')->merge($keep)->all());
             $this->automaticRoles->sync($user);
+            $this->assertActiveIctoAdminRemains('roles');
 
             Activity::log($actor, "Changed roles of {$user->username} to ".($roles->pluck('role_name')->implode(', ') ?: 'none'), Activity::UPDATE, 'Users');
         });
@@ -151,11 +157,34 @@ class AccountService
 
     public function canManage(User $actor, User $user): bool
     {
+        if (! $this->isActive($actor)) {
+            return false;
+        }
         if ($actor->hasRole('ICTO_ADMIN')) {
             return true;
         }
 
         return $actor->hasRole('ADMIN') && ! $user->hasAssignedRole();
+    }
+
+    /** A disabled or deleted administrator can no longer act, whatever roles they still hold. */
+    private function isActive(User $actor): bool
+    {
+        $current = User::find($actor->getKey());
+
+        return $current !== null && $current->status_flag;
+    }
+
+    /** Backstop: inside the transaction, so a change that would leave no enabled ICTO admin is rolled back. */
+    private function assertActiveIctoAdminRemains(string $key): void
+    {
+        $remaining = User::where('status_flag', true)
+            ->whereHas('roles', fn ($q) => $q->where('role_name', 'ICTO_ADMIN'))
+            ->count();
+
+        if ($remaining === 0) {
+            throw ValidationException::withMessages([$key => 'At least one active ICTO admin must remain.']);
+        }
     }
 
     private function authorize(User $actor, User $user): void
@@ -170,7 +199,7 @@ class AccountService
      *
      * @return array<string, mixed>
      */
-    private function validated(array $data, ?User $existing): array
+    private function validated(array $data, ?User $existing, User $actor): array
     {
         $text = fn (string $key) => ($value = trim((string) ($data[$key] ?? ''))) === '' ? null : $value;
         $errors = [];
@@ -180,6 +209,9 @@ class AccountService
             throw ValidationException::withMessages(['user_type' => 'Choose Admin, Employee or Student.']);
         }
         $name = $type->user_type_name;
+        if ($name === UserType::ADMIN && $existing?->user_type_id !== $type->id && ! $actor->hasRole('ICTO_ADMIN')) {
+            throw ValidationException::withMessages(['user_type' => 'Only ICTO admins can create admin-type accounts.']);
+        }
         $studentNo = $text('student_no');
         $employeeNo = $text('employee_no');
 
@@ -227,6 +259,11 @@ class AccountService
         $username = $text('username') ?? $existing?->username ?? $main;
         if ($username === null && ! isset($errors['username'])) {
             $errors['username'] = 'A sign-in name is required for admin accounts.';
+        }
+
+        if ($username !== null && ! isset($errors['username'])
+            && $this->taken('username', $username, $existing, lower: true)) {
+            $errors['username'] = 'This sign-in number is already used by another account.';
         }
 
         if ($errors !== []) {

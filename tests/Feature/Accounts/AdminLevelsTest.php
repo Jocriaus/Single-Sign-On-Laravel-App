@@ -195,4 +195,78 @@ class AdminLevelsTest extends TestCase
         $this->assertTrue($logs->every(fn ($text) => str_contains($text, '2021-1')));
         $this->assertTrue($logs->contains(fn ($text) => str_contains($text, 'Reset password')));
     }
+
+    public function test_a_disabled_or_deleted_administrator_cannot_act(): void
+    {
+        $student = User::factory()->student()->create();
+        $data = ['email' => 'd@example.test', 'user_type' => 'Student', 'first_name' => 'N', 'last_name' => 'P', 'student_no' => '5'];
+
+        $disabled = User::factory()->employee()->withRole('ICTO_ADMIN')->disabled()->create();
+        $deleted = User::factory()->employee()->withRole('ICTO_ADMIN')->create();
+        $deleted->delete();
+
+        foreach ([$disabled, $deleted] as $actor) {
+            $this->assertFalse($this->accounts->canManage($actor, $student));
+            $this->refuses(fn () => $this->accounts->create($actor, $data), AuthorizationException::class);
+            $this->refuses(fn () => $this->accounts->setRoles($actor, $student, ['HR_STAFF']), AuthorizationException::class);
+            $this->refuses(fn () => $this->accounts->unlock($actor, $student), AuthorizationException::class);
+        }
+    }
+
+    public function test_the_last_active_icto_admin_check_is_only_a_backstop(): void
+    {
+        // Unreachable one call at a time: the actor must be an enabled ICTO admin and the self rules stop them
+        // removing themselves, so the actor always remains. The check is pinned directly.
+        $check = new \ReflectionMethod($this->accounts, 'assertActiveIctoAdminRemains');
+        $check->invoke($this->accounts, 'roles');
+
+        User::query()->update(['status_flag' => false]);
+
+        $this->refuses(fn () => $check->invoke($this->accounts, 'roles'), ValidationException::class, 'At least one active ICTO admin must remain.');
+        $this->refuses(fn () => $check->invoke($this->accounts, 'status'), ValidationException::class, 'At least one active ICTO admin must remain.');
+    }
+
+    public function test_one_icto_admin_can_demote_another_and_a_demoted_one_cannot_act(): void
+    {
+        $a = $this->icto();
+        $c = User::factory()->employee()->withRole('ICTO_ADMIN')->create();
+
+        $this->accounts->setRoles($c, $a, ['HR_STAFF']);
+
+        $this->assertSame(['HR_STAFF'], $a->fresh()->roleNames());
+        $this->refuses(fn () => $this->accounts->setEnabled($a->fresh(), $c, false), AuthorizationException::class);
+    }
+
+    public function test_role_names_must_be_strings(): void
+    {
+        $this->refuses(fn () => $this->accounts->setRoles($this->icto(), User::factory()->student()->create(), [['ADMIN']]), ValidationException::class);
+    }
+
+    public function test_admin_cannot_act_on_themselves(): void
+    {
+        $admin = $this->admin();
+
+        $this->assertFalse($this->accounts->canManage($admin, $admin));
+        $this->refuses(fn () => $this->accounts->resetPassword($admin, $admin), AuthorizationException::class);
+    }
+
+    public function test_an_automatic_role_plus_a_custom_role_is_protected_from_admins(): void
+    {
+        $target = User::factory()->employee()->withRole('HR_STAFF')->create();
+        app(AutomaticRoles::class)->sync($target);
+
+        $this->assertSame(['EMPLOYEE', 'HR_STAFF'], $target->roleNames());
+        $this->assertFalse($this->accounts->canManage($this->admin(), $target));
+    }
+
+    public function test_a_refused_password_reset_changes_nothing(): void
+    {
+        $target = User::factory()->employee()->withRole('HR_STAFF')->create();
+        $hash = $target->password;
+
+        $this->refuses(fn () => $this->accounts->resetPassword($this->admin(), $target), AuthorizationException::class);
+
+        $this->assertSame($hash, $target->fresh()->password);
+        $this->assertFalse($target->fresh()->must_change_password);
+    }
 }

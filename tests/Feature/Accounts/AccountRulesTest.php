@@ -206,4 +206,76 @@ class AccountRulesTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_a_refused_sign_in_number_change_signs_nobody_out(): void
+    {
+        Http::fake();
+        $app = $this->registerApp(['backchannel_logout_uri' => 'https://app.test/backchannel-logout']);
+        $user = User::factory()->student()->create();
+        User::factory()->create(['username' => 'taken']);
+        $tokens = $this->tokensFor($user, $app);
+
+        $this->assertInvalid('username', fn () => $this->accounts->update($this->actor, $user, $this->data([
+            'email' => $user->email, 'student_no' => $user->student_no, 'username' => 'TAKEN',
+        ])), 'This sign-in number is already used by another account.');
+        $this->app->terminate();
+
+        Http::assertNothingSent();
+        $this->assertNotSame('TAKEN', $user->fresh()->username);
+        $this->refresh($app, $tokens['refresh_token'])->assertOk();
+    }
+
+    public function test_only_icto_admins_create_or_switch_to_admin_type_accounts(): void
+    {
+        $admin = User::factory()->employee()->withRole('ADMIN')->create();
+        $adminData = ['user_type' => 'Admin', 'username' => 'ops2', 'student_no' => null];
+
+        $this->assertInvalid('user_type', fn () => $this->accounts->create($admin, $this->data($adminData)), 'Only ICTO admins can create admin-type accounts.');
+
+        $student = User::factory()->student()->create();
+        $this->assertInvalid('user_type', fn () => $this->accounts->update($admin, $student, $this->data([
+            'email' => $student->email, 'username' => $student->username,
+        ] + $adminData)), 'Only ICTO admins can create admin-type accounts.');
+        $this->assertSame('Student', $student->fresh()->userType->user_type_name);
+
+        $this->assertSame('Admin', $this->accounts->create($this->actor, $this->data($adminData))['user']->userType->user_type_name);
+    }
+
+    public function test_disabling_a_person_signs_them_out_of_every_app(): void
+    {
+        Http::fake();
+        $app = $this->registerApp(['backchannel_logout_uri' => 'https://app.test/backchannel-logout']);
+        $user = User::factory()->student()->create();
+        $tokens = $this->tokensFor($user, $app);
+
+        $this->accounts->setEnabled($this->actor, $user, false);
+        $this->app->terminate();
+
+        $this->refresh($app, $tokens['refresh_token'])->assertStatus(400)->assertJson(['error' => 'invalid_grant']);
+        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://app.test/backchannel-logout');
+    }
+
+    public function test_extra_keys_in_the_data_are_ignored(): void
+    {
+        $extras = [
+            'password' => 'hacked-password-123', 'status_flag' => false, 'must_change_password' => false,
+            'roles' => ['ICTO_ADMIN'], 'id' => 9999,
+        ];
+
+        $user = $this->accounts->create($this->actor, $this->data($extras))['user']->fresh();
+
+        $this->assertNotSame(9999, $user->id);
+        $this->assertTrue($user->status_flag);
+        $this->assertTrue($user->must_change_password);
+        $this->assertFalse(Hash::check('hacked-password-123', $user->password));
+        $this->assertSame(['STUDENT'], $user->roleNames());
+
+        $hash = $user->password;
+        $this->accounts->update($this->actor, $user, $this->data(['email' => $user->email, 'student_no' => $user->student_no] + $extras));
+        $user = $user->fresh();
+        $this->assertSame($hash, $user->password);
+        $this->assertTrue($user->status_flag);
+        $this->assertTrue($user->must_change_password);
+        $this->assertSame(['STUDENT'], $user->roleNames());
+    }
 }
