@@ -16,6 +16,10 @@ class AuditApi
 
     public function handle(Request $request, Closure $next): Response
     {
+        if (! $request->is('api', 'api/*')) {
+            return $next($request);
+        }
+
         $response = $next($request);
 
         // The audit trail must never break the call it describes.

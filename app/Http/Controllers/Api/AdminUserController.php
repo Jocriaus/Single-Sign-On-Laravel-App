@@ -13,6 +13,7 @@ use App\Sso\Api\Paging;
 use App\Sso\Api\RequestFields;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /** Thin JSON over AccountService: every account rule lives there. */
 class AdminUserController extends Controller
@@ -102,9 +103,13 @@ class AdminUserController extends Controller
 
         if (! array_key_exists('user_type', $data) && array_key_exists('user_type_id', $data)) {
             $id = $data['user_type_id'];
-            $data['user_type'] = is_scalar($id) && ctype_digit((string) $id) && strlen((string) $id) <= 18
+            $name = is_scalar($id) && ctype_digit((string) $id) && strlen((string) $id) <= 18
                 ? UserType::find((string) $id)?->user_type_name
                 : null;
+            if ($name === null) {
+                throw ValidationException::withMessages(['userTypeId' => ['Choose a valid user type.']]);
+            }
+            $data['user_type'] = $name;
         }
         unset($data['user_type_id']);
 

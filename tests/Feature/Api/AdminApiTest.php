@@ -231,4 +231,60 @@ class AdminApiTest extends TestCase
         $items = $this->withToken($token)->getJson('/api/v1/admin/logs')->assertOk()->json('data.items');
         $this->assertSame('Second thing', $items[0]['activity']);
     }
+    public function test_renaming_a_role_leaves_similar_names_in_the_same_list_alone(): void
+    {
+        $token = $this->tokenFor($this->icto());
+        $hr = Role::create(['role_name' => 'HR']);
+        Role::create(['role_name' => 'HR_STAFF']);
+        $app = $this->registerApp(['allowed_roles' => ['HR', 'HR_STAFF']]);
+
+        $this->withToken($token)->putJson('/api/v1/admin/role/'.$hr->id, ['roleName' => 'PEOPLE'])->assertOk();
+
+        $this->assertSame(['PEOPLE', 'HR_STAFF'], $app['client']->fresh()->allowed_roles);
+    }
+
+    public function test_a_lowercase_rename_of_a_standard_role_is_refused(): void
+    {
+        $token = $this->tokenFor($this->icto());
+        $role = Role::where('role_name', 'STUDENT')->first();
+
+        $this->withToken($token)->putJson('/api/v1/admin/role/'.$role->id, ['roleName' => 'pupil'])
+            ->assertStatus(400)->assertJson(['errorCode' => 'ROLE_PROTECTED']);
+        $this->assertSame('STUDENT', $role->fresh()->role_name);
+    }
+
+    public function test_admin_level_cannot_update_enable_unlock_or_force_reset_a_protected_account(): void
+    {
+        $icto = $this->icto();
+        $icto->update(['account_locked' => true, 'failed_attempts' => 5, 'status_flag' => false]);
+        $before = $icto->fresh()->only(['first_name', 'status_flag', 'account_locked', 'must_change_password']);
+        $token = $this->tokenFor($this->adminLevel());
+        $url = '/api/v1/admin/user/'.$icto->id;
+
+        $this->withToken($token)->putJson($url, ['userType' => 'Admin', 'username' => $icto->username, 'email' => 'x@bulsu.test', 'firstName' => 'Hacked'])->assertStatus(403);
+        foreach (['/enable', '/unlock', '/force-password-reset'] as $suffix) {
+            $this->withToken($token)->putJson($url.$suffix)->assertStatus(403)->assertJson(['errorCode' => 'FORBIDDEN']);
+        }
+        $this->assertSame($before, $icto->fresh()->only(['first_name', 'status_flag', 'account_locked', 'must_change_password']));
+    }
+
+    public function test_an_unknown_user_type_id_is_reported_on_that_field(): void
+    {
+        $token = $this->tokenFor($this->icto());
+
+        $response = $this->withToken($token)->postJson('/api/v1/admin/user', ['userTypeId' => 99999, 'email' => 'a@bulsu.test'])->assertStatus(422);
+        $this->assertArrayHasKey('userTypeId', $response->json('data'));
+        $this->assertArrayNotHasKey('userType', $response->json('data'));
+    }
+
+    public function test_logs_still_show_the_username_of_a_deleted_administrator(): void
+    {
+        $actor = $this->icto();
+        $token = $this->tokenFor($this->icto());
+        Activity::log($actor, 'Did a thing', 'READ', 'Test');
+        $actor->delete();
+
+        $items = $this->withToken($token)->getJson('/api/v1/admin/logs')->assertOk()->json('data.items');
+        $this->assertSame($actor->username, $items[0]['username']);
+    }
 }

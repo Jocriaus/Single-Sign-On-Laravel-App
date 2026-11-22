@@ -5,6 +5,9 @@ namespace Tests\Feature\Api;
 use App\Models\ApiAuditLog;
 use App\Models\User;
 use App\Sso\Api\SensitiveDataMasker;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\OAuthFlow;
 use Tests\TestCase;
 
@@ -92,5 +95,40 @@ class AuditLogRedactionTest extends TestCase
         $this->assertSame('[non-JSON body omitted]', $masker->mask('12'));
         $this->assertNull($masker->mask(null));
         $this->assertSame(10000, strlen($masker->mask('{"a":"'.str_repeat('b', 20000).'"}')));
+    }
+    public function test_unmatched_api_paths_and_methods_are_recorded_once(): void
+    {
+        $this->getJson('/api/v1/nope')->assertStatus(404);
+        $this->assertSame(1, ApiAuditLog::where('endpoint', '/api/v1/nope')->where('status_code', 404)->count());
+
+        $this->postJson('/api/v1/user/me')->assertStatus(405);
+        $this->assertSame(1, ApiAuditLog::where('endpoint', '/api/v1/user/me')->where('status_code', 405)->count());
+
+        $this->getJson('/api')->assertStatus(404);
+        $this->assertSame(1, ApiAuditLog::where('endpoint', '/api')->count());
+    }
+
+    public function test_a_normal_call_is_one_row_and_web_pages_are_not_recorded(): void
+    {
+        [, $tokens] = $this->adminTokens();
+        ApiAuditLog::query()->delete();
+
+        $this->withToken($tokens['access_token'])->getJson('/api/v1/user/me')->assertOk();
+        $this->assertSame(1, ApiAuditLog::count());
+
+        $this->flushSession();
+        $this->get('/login');
+        $this->assertSame(1, ApiAuditLog::count());
+    }
+
+    public function test_a_failing_audit_write_leaves_the_response_intact(): void
+    {
+        [, $tokens] = $this->adminTokens();
+        Schema::drop('api_audit_logs');
+        Exceptions::fake();
+
+        $this->withToken($tokens['access_token'])->getJson('/api/v1/user/me')->assertOk()->assertJson(['success' => true]);
+
+        Exceptions::assertReported(QueryException::class);
     }
 }

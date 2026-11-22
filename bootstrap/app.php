@@ -33,8 +33,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'sso.admin' => RequireSsoAdmin::class,
             'api.audit' => AuditApi::class,
         ]);
-        // Outermost on /api, so calls that fail authentication are recorded too.
-        $middleware->prependToGroup('api', AuditApi::class);
+        // Global, so calls that fail authentication or match no route are recorded too (it only acts on /api).
+        $middleware->prepend(AuditApi::class);
         // Whose session it is comes first, then what that account still has to do.
         $middleware->appendToGroup('web', [EnsureSessionOwner::class, RequirePasswordChange::class]);
         $middleware->validateCsrfTokens(except: ['oauth2/token', 'connect/logout']);

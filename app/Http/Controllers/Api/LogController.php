@@ -13,7 +13,7 @@ class LogController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = ActivityLog::query()->with('user')->orderByDesc('id');
+        $query = ActivityLog::query()->with(['user' => fn ($q) => $q->withTrashed()])->orderByDesc('id');
 
         return ApiResponse::success('Activity loaded.', Paging::of($query, $request, fn (ActivityLog $log) => [
             'id' => $log->id,
