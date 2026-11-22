@@ -88,6 +88,7 @@
         <a class="brand" href="/admin">BulSU SSO <span>Admin</span></a>
         <nav class="sections" aria-label="Admin sections">
             <a href="/admin" @if (request()->is('admin')) aria-current="page" @endif>Overview</a>
+            <a href="/admin/users" @if (request()->is('admin/users*')) aria-current="page" @endif>Users</a>
             @if (auth()->user()?->hasRole('ICTO_ADMIN'))
                 <a href="/admin/apps" @if (request()->is('admin/apps*')) aria-current="page" @endif>Apps</a>
             @endif

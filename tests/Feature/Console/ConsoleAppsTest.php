@@ -57,6 +57,17 @@ class ConsoleAppsTest extends TestCase
         $this->assertSame(0, Client::count());
     }
 
+    public function test_a_failed_submit_with_a_blank_name_keeps_the_ticks(): void
+    {
+        $this->from('/admin/apps/new')
+            ->post('/admin/apps', $this->form(['name' => '', 'may_administer' => '1', 'require_pkce' => null]))
+            ->assertRedirect('/admin/apps/new');
+
+        $html = $this->get('/admin/apps/new')->getContent();
+        $this->assertMatchesRegularExpression('/name="may_administer"[^>]*checked/', $html);
+        $this->assertDoesNotMatchRegularExpression('/name="require_pkce"[^>]*checked/', $html);
+    }
+
     public function test_editing_an_app_keeps_its_id_and_secret(): void
     {
         $app = $this->registerApp(['name' => 'Old']);

@@ -1,7 +1,7 @@
 {{-- The app form fields, shared by "Register app" and the app page. Expects $roleChoices and optionally $app. --}}
 @php
     $app = $app ?? null;
-    $typed = old('name') !== null;
+    $typed = session()->hasOldInput();
     $mayAdminister = $typed ? (bool) old('may_administer') : in_array('sso.admin', $app?->scopes ?? [], true);
     $requirePkce = $typed ? (bool) old('require_pkce') : ($app ? $app->require_pkce : true);
     $accessMode = old('access_mode', $app?->allowed_roles ? 'roles' : 'everyone');
