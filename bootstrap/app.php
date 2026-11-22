@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountActive;
+use App\Http\Middleware\EnsureSessionOwner;
 use App\Http\Middleware\RequirePasswordChange;
 use App\Sso\Api\ApiResponse;
 use Illuminate\Auth\AuthenticationException;
@@ -22,9 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'password.changed' => RequirePasswordChange::class,
             'account.active' => EnsureAccountActive::class,
+            'session.owner' => EnsureSessionOwner::class,
         ]);
-        $middleware->appendToGroup('web', RequirePasswordChange::class);
-        $middleware->validateCsrfTokens(except: ['oauth2/token']);
+        // Whose session it is comes first, then what that account still has to do.
+        $middleware->appendToGroup('web', [EnsureSessionOwner::class, RequirePasswordChange::class]);
+        $middleware->validateCsrfTokens(except: ['oauth2/token', 'connect/logout']);
         $middleware->trimStrings(except: ['current_password', 'password', 'password_confirmation', 'new_password', 'new_password_confirmation']);
         $middleware->redirectGuestsTo(fn () => route('login'));
     })

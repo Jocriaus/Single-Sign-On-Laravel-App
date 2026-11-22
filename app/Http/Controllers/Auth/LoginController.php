@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Sso\Accounts\Lockout;
 use App\Sso\Activity;
 use App\Sso\LocalRedirect;
+use App\Sso\Logout\BackChannelLogout;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -76,8 +77,15 @@ class LoginController extends Controller
         return LocalRedirect::intended();
     }
 
-    public function logout(Request $request): RedirectResponse
+    /** Signs out of the SSO and of every app signed in from this browser session. */
+    public function logout(Request $request, BackChannelLogout $logout): RedirectResponse
     {
+        $user = $request->user();
+        $sid = $request->session()->get('sso.sid');
+        if ($user !== null && is_string($sid) && $sid !== '') {
+            $logout->signOutSession($user, $sid);
+        }
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

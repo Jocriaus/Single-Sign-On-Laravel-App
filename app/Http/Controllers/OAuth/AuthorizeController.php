@@ -50,7 +50,11 @@ class AuthorizeController extends Controller
             $this->requireOpenIdAndPkce($authRequest);
 
             $client = Client::find($authRequest->getClient()->getIdentifier());
-            if ($client !== null && ! AppAccess::allows($client, $request->user())) {
+            if ($client === null) {
+                // Fail closed: an app whose access rules can't be read gets no sign-in.
+                throw OAuthServerException::invalidClient($psrRequest);
+            }
+            if (! AppAccess::allows($client, $request->user())) {
                 Activity::log($request->user(), "Refused sign-in to app {$client->name}: no allowed role", Activity::AUTH, 'OAuth2');
 
                 return response()->view('no-access', [

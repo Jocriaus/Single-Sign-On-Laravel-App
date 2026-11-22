@@ -21,9 +21,9 @@ trait OAuthFlow
     }
 
     /** The state the login page leaves behind, without typing a password. */
-    protected function signInToSso(User $user): void
+    protected function signInToSso(User $user): static
     {
-        $this->actingAs($user)->withSession([
+        return $this->actingAs($user)->withSession([
             'sso.sid' => Str::random(43),
             'sso.user_id' => $user->getKey(),
             'sso.username' => $user->username,

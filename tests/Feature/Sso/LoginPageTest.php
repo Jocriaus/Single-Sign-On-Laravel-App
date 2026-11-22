@@ -5,10 +5,13 @@ namespace Tests\Feature\Sso;
 use App\Models\ActivityLog;
 use App\Models\User;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Support\OAuthFlow;
 use Tests\TestCase;
 
 class LoginPageTest extends TestCase
 {
+    use OAuthFlow;
+
     private function admin(): User
     {
         return User::findByUsername('admin');
@@ -119,7 +122,7 @@ class LoginPageTest extends TestCase
     {
         $this->get('/')->assertRedirect('/login');
         $user = User::factory()->student()->create(['first_name' => 'Juan', 'last_name' => 'dela Cruz']);
-        $this->actingAs($user)->get('/')
+        $this->signInToSso($user)->get('/')
             ->assertOk()->assertSee("You're signed in as", false)->assertSee('Juan dela Cruz');
     }
 

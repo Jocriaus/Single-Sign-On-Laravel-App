@@ -223,7 +223,9 @@ class SsoLoginFlowTest extends TestCase
     public function test_session_without_the_sso_sign_in_details_starts_over_at_the_login_page(): void
     {
         $app = $this->registerApp();
-        $this->actingAs(User::factory()->create());
+        $user = User::factory()->create();
+        // The account owns the session, but sso.sid and sso.auth_time are missing.
+        $this->actingAs($user)->withSession(['sso.user_id' => $user->id, 'sso.username' => $user->username]);
 
         $this->authorize($app['client'], ['code_challenge' => $this->challenge(Str::random(64))])
             ->assertRedirect('/login');

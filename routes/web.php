@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\OAuth\AuthorizeController;
 use App\Http\Controllers\OAuth\DiscoveryController;
+use App\Http\Controllers\OAuth\EndSessionController;
 use App\Http\Controllers\OAuth\UserInfoController;
 use App\Sso\HealthProbe;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,8 @@ Route::get('/', HomeController::class)->middleware('auth')->name('home');
 Route::get('/login', [LoginController::class, 'show'])->name('login');
 Route::post('/login', [LoginController::class, 'attempt'])->name('login.attempt');
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+// Visited by the browser, sent by an app: needs the session; apps post to it cross-site, so no CSRF token.
+Route::match(['get', 'post'], '/connect/logout', EndSessionController::class);
 
 Route::middleware('auth')->group(function () {
     Route::get('/change-password', [PasswordChangeController::class, 'show'])->name('password.change');
@@ -36,6 +39,7 @@ Route::withoutMiddleware([
     \Illuminate\View\Middleware\ShareErrorsFromSession::class,
     \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
     \App\Http\Middleware\RequirePasswordChange::class,
+    \App\Http\Middleware\EnsureSessionOwner::class,
 ])->group(function () {
     Route::get('/.well-known/openid-configuration', [DiscoveryController::class, 'configuration']);
     Route::get('/oauth2/jwks', [DiscoveryController::class, 'jwks']);

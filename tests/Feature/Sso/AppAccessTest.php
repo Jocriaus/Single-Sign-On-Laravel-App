@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Sso\Accounts\AutomaticRoles;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Passport\ClientRepository as PassportClientRepository;
 use Tests\Support\OAuthFlow;
 use Tests\TestCase;
 
@@ -111,12 +112,36 @@ class AppAccessTest extends TestCase
             ->assertJson(['error' => 'invalid_grant', 'hint' => 'This account does not have access to this app.']);
     }
 
+    public function test_an_app_whose_record_cannot_be_read_is_refused(): void
+    {
+        $app = $this->registerApp(['allowed_roles' => 'EMPLOYEE']);
+        // Passport still validates the request against the app, but this server's own lookup finds nothing.
+        $this->app->instance(PassportClientRepository::class, new class($app['client']) extends PassportClientRepository
+        {
+            public function __construct(private Client $client)
+            {
+            }
+
+            public function find(string|int $id): ?Client
+            {
+                return $this->client;
+            }
+        });
+        $app['client']->delete();
+
+        $response = $this->askToSignIn($this->student(), $app['client']);
+
+        $response->assertStatus(400)->assertViewIs('oauth-error');
+        $this->assertNull($response->headers->get('Location'));
+        $this->assertSame(0, SignIn::count());
+        $this->assertSame(0, DB::table('oauth_auth_codes')->count());
+    }
+
     public function test_the_admin_console_is_never_subject_to_app_rules(): void
     {
         $this->registerApp(['allowed_roles' => 'STUDENT, EMPLOYEE']);
         $admin = User::factory()->adminType()->withRole('ICTO_ADMIN')->create();
 
-        $this->actingAs($admin)->withSession(['sso.sid' => Str::random(43), 'sso.auth_time' => time()])
-            ->get('/')->assertOk();
+        $this->signInToSso($admin)->get('/')->assertOk();
     }
 }
